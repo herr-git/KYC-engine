@@ -1,0 +1,28 @@
+{
+  "C001": {"identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.98}},
+  "C002": {
+    "identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.95},
+    "crypto": {"high_risk_exposure_pct": 2.0, "mixer_exposure": false}
+  },
+  "C003": {
+    "identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.91},
+    "crypto": {"high_risk_exposure_pct": 18.0, "mixer_exposure": false}
+  },
+  "C004": {
+    "identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.96},
+    "crypto": {"high_risk_exposure_pct": 4.0, "mixer_exposure": false}
+  },
+  "C005": {
+    "identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.93},
+    "crypto": {"high_risk_exposure_pct": 35.0, "mixer_exposure": true}
+  },
+  "C006": {
+    "identity": {"document_authentic": true, "liveness_passed": null, "face_match": 0.84},
+    "crypto": {"high_risk_exposure_pct": 22.0, "mixer_exposure": false}
+  },
+  "C007": {
+    "identity": {"simulate_outage": true},
+    "crypto": {"high_risk_exposure_pct": 0.0, "mixer_exposure": false}
+  },
+  "C008": {"identity": {"document_authentic": true, "liveness_passed": true, "face_match": 0.97}}
+}

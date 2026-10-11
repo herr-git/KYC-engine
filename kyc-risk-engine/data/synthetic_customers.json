@@ -1,0 +1,57 @@
+[
+  {
+    "customer_id": "C001", "full_name": "Freja Lindqvist", "date_of_birth": "1988-04-12",
+    "nationality": "DK", "residence_country": "DK", "occupation": "salaried_employee",
+    "onboarding_channel": "face_to_face", "product": "retail_fiat",
+    "expected_monthly_volume_eur": 2500, "source_of_funds_documented": true
+  },
+  {
+    "customer_id": "C002", "full_name": "Lukas Brandt", "date_of_birth": "1992-11-03",
+    "nationality": "DE", "residence_country": "DE", "occupation": "salaried_employee",
+    "onboarding_channel": "remote_with_liveness", "product": "crypto_buy_sell",
+    "expected_monthly_volume_eur": 1500, "source_of_funds_documented": true,
+    "wallet_addresses": ["demo_wallet_c002_a"]
+  },
+  {
+    "customer_id": "C003", "full_name": "Amara Oyelaran", "date_of_birth": "1985-07-22",
+    "nationality": "NG", "residence_country": "DE", "occupation": "self_employed",
+    "onboarding_channel": "remote_with_liveness", "product": "crypto_transfer_out",
+    "expected_monthly_volume_eur": 12000, "source_of_funds_documented": false,
+    "counterparty_countries": ["NG", "AE"],
+    "wallet_addresses": ["demo_wallet_c003_a", "demo_wallet_c003_b"]
+  },
+  {
+    "customer_id": "C004", "full_name": "Marta Ellingsen-Okoye", "date_of_birth": "1964-09-18",
+    "nationality": "NG", "residence_country": "GB", "occupation": "self_employed",
+    "onboarding_channel": "remote_with_liveness", "product": "crypto_buy_sell",
+    "expected_monthly_volume_eur": 8000, "source_of_funds_documented": true,
+    "wallet_addresses": ["demo_wallet_c004_a"]
+  },
+  {
+    "customer_id": "C005", "full_name": "Viktor Brennagan", "date_of_birth": "1971-03-02",
+    "nationality": "RU", "residence_country": "AE", "occupation": "self_employed",
+    "onboarding_channel": "remote_with_liveness", "product": "crypto_otc",
+    "expected_monthly_volume_eur": 90000, "source_of_funds_documented": false,
+    "wallet_addresses": ["demo_wallet_c005_a"]
+  },
+  {
+    "customer_id": "C006", "full_name": "Emre Yilmaz", "date_of_birth": "1979-02-14",
+    "nationality": "TR", "residence_country": "TR", "occupation": "cash_intensive_business",
+    "onboarding_channel": "remote_no_liveness", "product": "crypto_transfer_out",
+    "expected_monthly_volume_eur": 30000, "source_of_funds_documented": false,
+    "wallet_addresses": ["demo_wallet_c006_a"]
+  },
+  {
+    "customer_id": "C007", "full_name": "Sofie Dahl", "date_of_birth": "1995-08-30",
+    "nationality": "DK", "residence_country": "DK", "occupation": "student",
+    "onboarding_channel": "remote_with_liveness", "product": "crypto_buy_sell",
+    "expected_monthly_volume_eur": 600, "source_of_funds_documented": true,
+    "wallet_addresses": ["demo_wallet_c007_a"]
+  },
+  {
+    "customer_id": "C008", "full_name": "Victor Brennagan", "date_of_birth": "1990-05-05",
+    "nationality": "GB", "residence_country": "GB", "occupation": "salaried_employee",
+    "onboarding_channel": "face_to_face", "product": "retail_fiat",
+    "expected_monthly_volume_eur": 3000, "source_of_funds_documented": true
+  }
+]

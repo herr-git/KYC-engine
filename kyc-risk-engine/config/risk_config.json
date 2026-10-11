@@ -1,0 +1,62 @@
+{
+  "_note": "Illustrative demo values only. Not an official risk list. A real deployment must source country lists and weights from its own documented risk assessment.",
+  "version": "2026.10-demo",
+  "weights": {
+    "geography": 0.25,
+    "screening": 0.30,
+    "product": 0.10,
+    "channel": 0.10,
+    "identity": 0.10,
+    "crypto_exposure": 0.10,
+    "customer_profile": 0.05
+  },
+  "bands": {
+    "medium_from": 35,
+    "high_from": 65
+  },
+  "compounding": {
+    "elevated_from": 60,
+    "medium_if_at_least": 2,
+    "high_if_at_least": 3
+  },
+  "required_factors": ["screening", "identity", "geography"],
+  "missing_data_score": 60,
+  "max_missing_weight_before_review": 0.30,
+  "screening": {
+    "confirmed_match_from": 0.92,
+    "potential_match_from": 0.80
+  },
+  "country_risk": {
+    "default": 35,
+    "scores": {
+      "DK": 10, "DE": 10, "PL": 10, "GB": 10, "SE": 10, "NL": 10,
+      "IL": 25, "AE": 45, "TR": 45, "NG": 60, "RU": 85,
+      "MM": 90, "IR": 100, "KP": 100
+    },
+    "call_for_action": ["IR", "KP", "MM"]
+  },
+  "product_risk": {
+    "retail_fiat": 15,
+    "crypto_buy_sell": 40,
+    "crypto_transfer_out": 60,
+    "crypto_otc": 75
+  },
+  "channel_risk": {
+    "face_to_face": 10,
+    "remote_with_liveness": 30,
+    "remote_no_liveness": 70
+  },
+  "occupation_risk": {
+    "salaried_employee": 15,
+    "student": 20,
+    "unemployed": 30,
+    "self_employed": 35,
+    "crypto_trader": 50,
+    "cash_intensive_business": 70,
+    "unknown": 50
+  },
+  "profile": {
+    "undocumented_source_of_funds_penalty": 20,
+    "penalty_applies_above_monthly_volume_eur": 5000
+  }
+}
