@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Risk Model Playground</title>
+  <meta name="description" content="Move the weights and cut-offs of a customer risk model and watch 300 synthetic customers change band. Built on a clean-room KYC risk engine.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#chart-heading">Skip to the results</a>
+
+  <header class="masthead">
+    <h1>Risk model playground</h1>
+    <p>Every customer risk score rests on choices someone made: how much each factor counts, and where the cut-offs between low, medium and high sit. Change them here and see who gets flagged.</p>
+  </header>
+
+  <div class="layout">
+    <section class="headline" aria-label="Summary of the current settings">
+      <p id="headline-text" class="headline-text"></p>
+      <p id="calibration-note" class="note" hidden></p>
+    </section>
+
+    <aside class="controls" aria-label="Model settings">
+      <div class="controls-top">
+        <h2>Start from</h2>
+        <div id="presets" class="presets"></div>
+      </div>
+
+      <div class="group">
+        <h2>How much each factor counts</h2>
+        <p class="hint">Sliders set relative size. The percentages show each factor's share of the total score.</p>
+        <div id="weights"></div>
+        <p id="weights-note" class="note" hidden>Every slider is at zero, so all factors count equally.</p>
+      </div>
+
+      <div class="group">
+        <h2>Where the cut-offs sit</h2>
+        <p class="hint">A weighted score below the first cut-off is low, and at or above the second it is high. You can also drag the lines on the chart.</p>
+        <div id="cutoffs"></div>
+      </div>
+
+      <div class="group">
+        <h2>Safety rules</h2>
+        <p class="hint">Rules lift a customer to a higher band when the weighted score alone would hide a hard stop. Switch them off to see why they exist.</p>
+        <div id="rules"></div>
+        <div id="elevated-wrap"></div>
+      </div>
+
+      <div class="share">
+        <button id="copy-link" class="button" type="button">Copy link to these settings</button>
+        <p id="copy-status" class="hint" role="status"></p>
+      </div>
+    </aside>
+
+    <section class="chartblock" aria-labelledby="chart-heading">
+      <h2 id="chart-heading">Where 300 customers land</h2>
+      <p class="hint" id="chart-help">Each dot is one customer, placed by weighted score. Left of the first line is low, between the lines is medium, and right of the second line is high. A ring means a safety rule lifted the customer above the band their score alone would give.</p>
+      <div class="chart-wrap">
+        <svg id="chart" role="img" aria-labelledby="chart-heading chart-help" viewBox="0 0 760 296" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <ul class="legend" id="legend" aria-label="Dot colours"></ul>
+      <div id="band-bar" class="band-bar" aria-hidden="true"></div>
+      <ul id="band-counts" class="band-counts"></ul>
+    </section>
+
+    <section class="listblock" aria-labelledby="list-heading">
+      <div class="list-head">
+        <h2 id="list-heading">Ranked by risk</h2>
+        <div class="tabs" role="tablist" aria-label="Which customers to show">
+          <button role="tab" id="tab-top" aria-selected="true" aria-controls="list-panel" type="button">Highest risk</button>
+          <button role="tab" id="tab-examples" aria-selected="false" aria-controls="list-panel" type="button" tabindex="-1">Worked examples</button>
+        </div>
+      </div>
+      <p id="list-intro" class="hint"></p>
+      <div id="list-panel" role="tabpanel" aria-labelledby="tab-top">
+        <ol id="list" class="list"></ol>
+      </div>
+      <div class="list-foot">
+        <p id="list-count" class="hint"></p>
+        <button id="show-more" class="button" type="button">Show 10 more</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <footer class="footer">
+    <p>All customers are synthetic and every number is made up. Weights, cut-offs and country scores are illustrative, not a real risk list. The scores come from the Python engine in <a href="../kyc-risk-engine/">kyc-risk-engine</a>, and a test checks that this page reaches the same answers as that engine.</p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="model.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

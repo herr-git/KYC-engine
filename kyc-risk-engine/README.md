@@ -12,6 +12,8 @@ This is a clean-room reference implementation built from public regulatory guida
 
 Market research behind the design is in [docs/market-discovery.md](docs/market-discovery.md).
 
+An interactive companion, the [risk model playground](../risk-model-playground/), lets you change the weights, cut-offs and rules and see the effect on 300 synthetic customers.
+
 ## Quick start
 
 ```bash

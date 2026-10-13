@@ -51,10 +51,14 @@ class RiskEngine:
 
     # ---- assessment -----------------------------------------------------------------
 
-    def assess(self, customer: Customer) -> RiskAssessment:
+    def collect(self, customer: Customer) -> tuple[list[FactorScore], dict[str, SourceResult]]:
+        """Query the sources and score the seven factors. Returns the factors and the raw source results.
+
+        Public so other tools (for example the risk model playground) can reuse the
+        exact scoring instead of copying it.
+        """
         cfg = self.config
         data = self._gather(customer)
-
         factors: list[FactorScore] = [
             scoring.score_geography(customer, data.get("country_risk"), cfg),
             scoring.score_screening(customer, data.get("screening"), cfg),
@@ -64,6 +68,11 @@ class RiskEngine:
             scoring.score_crypto_exposure(customer, data.get("crypto_exposure"), cfg),
             scoring.score_profile(customer, cfg),
         ]
+        return factors, data
+
+    def assess(self, customer: Customer) -> RiskAssessment:
+        cfg = self.config
+        factors, data = self.collect(customer)
         score = sum(f.contribution for f in factors)
         band = self._band_for(score)
 
@@ -159,7 +168,9 @@ class RiskEngine:
             review.append(f"Cannot complete onboarding checks without: {', '.join(missing_required)}")
 
         missing_weight = sum(f.weight for f in factors if not f.data_available)
-        if missing_weight > self.config["max_missing_weight_before_review"]:
+        # Small tolerance: three factors at 10% each sum to 0.30000000000000004 in floating point,
+        # which must not count as "more than 30%".
+        if missing_weight > self.config["max_missing_weight_before_review"] + 1e-9:
             names = ", ".join(f.name for f in factors if not f.data_available)
             raise_floor(RiskBand.MEDIUM, f"Too much missing data ({missing_weight:.0%} of weight: {names})")
             review.append(f"Score is unreliable: no data for {names}")

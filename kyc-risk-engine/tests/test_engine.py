@@ -87,6 +87,34 @@ def test_audit_log_records_config_digest_and_factors(customers, tmp_path):
     assert {f["name"] for f in record["factors"]} >= {"geography", "screening", "identity"}
 
 
+def test_collect_gives_the_same_factors_the_assessment_uses(engine, customers):
+    factors, data = engine.collect(customers["C004"])
+    a = engine.assess(customers["C004"])
+    assert [f.name for f in factors] == [f.name for f in a.factors]
+    assert sum(f.contribution for f in factors) == pytest.approx(a.score)
+    assert "screening" in data
+
+
+def test_missing_weight_of_exactly_thirty_percent_does_not_trigger_the_rule(customers, tmp_path):
+    # Country, identity and crypto exposure at 10% each add up to 0.30000000000000004 in
+    # floating point. That is "30%", not "more than 30%", so the rule must stay quiet.
+    from kyc_risk_engine.connectors import MockScreeningSource
+
+    raw = json.loads((ROOT / "config" / "risk_config.json").read_text())
+    raw["weights"] = {"geography": 0.10, "screening": 0.30, "product": 0.15, "channel": 0.15,
+                      "identity": 0.10, "crypto_exposure": 0.10, "customer_profile": 0.10}
+    path = tmp_path / "cfg.json"
+    path.write_text(json.dumps(raw))
+    cfg = load_config(path)
+    assert 0.1 + 0.1 + 0.1 > 0.3  # the floating-point trap this test guards against
+
+    eng = RiskEngine(config=cfg, sources=[MockScreeningSource()])  # country, identity, crypto all missing
+    a = eng.assess(customers["C002"])
+    missing = [f.name for f in a.factors if not f.data_available]
+    assert sorted(missing) == ["crypto_exposure", "geography", "identity"]
+    assert not any("Too much missing data" in o for o in a.overrides_applied)
+
+
 def test_narrative_only_restates_the_decision(engine, customers):
     a = engine.assess(customers["C004"])
     assert a.band.value in a.narrative

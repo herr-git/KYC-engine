@@ -7,8 +7,7 @@ Hands-on projects that show how AI can be applied in regulated financial service
 | Project | What it shows |
 |---|---|
 | [kyc-risk-engine](kyc-risk-engine/) | Explainable customer risk scoring for KYC and anti-money laundering: data source integration, ranking, hard-stop rules, audit trail, and an AI explanation layer that cannot change the decision |
-
-More projects will be added here.
+| [risk-model-playground](risk-model-playground/) | An interactive page on top of the engine. Move the weights, cut-offs and safety rules, and watch 300 synthetic customers change band. A test proves the page gives the same answers as the engine |
 
 ## Ground rules for everything in this repository
 
