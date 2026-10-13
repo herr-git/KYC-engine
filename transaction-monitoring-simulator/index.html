@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transaction Monitoring Simulator</title>
+  <meta name="description" content="Set alert rules on 400 customers' fake payments and see how many real problems each rule catches against how many false alarms it creates.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#chart-heading">Skip to the results</a>
+
+  <header class="masthead">
+    <h1>Transaction monitoring simulator</h1>
+    <p>After a customer is onboarded, a firm still has to watch what they do with their money. Every alert rule is a bet: set it loose and analysts drown in false alarms, set it tight and real problems slip through. Set the rules here and see what each one catches.</p>
+  </header>
+
+  <div class="layout">
+    <section class="headline" aria-label="Summary of the current rules">
+      <p id="headline-text" class="headline-text"></p>
+    </section>
+
+    <aside class="controls" aria-label="Alert rules">
+      <div class="controls-top">
+        <h2>Start from</h2>
+        <div id="presets" class="presets"></div>
+        <p id="preset-note" class="hint"></p>
+      </div>
+
+      <div class="group">
+        <h2>Alert rules</h2>
+        <p class="hint">Switch a rule on, then set how strict it is. The line under each rule shows what that rule would do on its own.</p>
+        <div id="rules"></div>
+      </div>
+
+      <div class="group">
+        <h2>Customer risk</h2>
+        <div id="tighten-wrap"></div>
+      </div>
+
+      <div class="share">
+        <button id="copy-link" class="button" type="button">Copy link to these rules</button>
+        <p id="copy-status" class="hint" role="status"></p>
+      </div>
+    </aside>
+
+    <section class="chartblock" aria-labelledby="chart-heading">
+      <h2 id="chart-heading">Real problems caught against false alarms</h2>
+      <p class="hint" id="chart-help">Each line is one rule on its own, from its loosest setting to its strictest. A dot higher up catches more real problems. A dot further right raises more false alarms. The big ringed dot is all your switched-on rules together. The dashed line is what flagging customers at random would do.</p>
+      <p class="hint chart-tip">Drag a dot along its line to change that rule's setting.</p>
+      <div class="chart-wrap">
+        <svg id="chart" role="img" aria-labelledby="chart-heading chart-help" viewBox="0 0 760 470" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+      <ul class="legend" id="legend" aria-label="Rules shown on the chart"></ul>
+      <ul id="tiles" class="tiles"></ul>
+    </section>
+
+    <section class="listblock" aria-labelledby="list-heading">
+      <div class="list-head">
+        <h2 id="list-heading">Cases the rules raised</h2>
+        <div class="tabs" role="tablist" aria-label="Which cases to show">
+          <button role="tab" id="tab-flagged" aria-selected="true" aria-controls="list-panel" type="button">Flagged</button>
+          <button role="tab" id="tab-missed" aria-selected="false" aria-controls="list-panel" type="button" tabindex="-1">Missed problems</button>
+        </div>
+      </div>
+      <p id="list-intro" class="hint"></p>
+      <div id="filter" class="presets filter" role="group" aria-label="Filter flagged customers"></div>
+      <div id="list-panel" role="tabpanel" aria-labelledby="tab-flagged">
+        <ol id="list" class="list"></ol>
+      </div>
+      <div class="list-foot">
+        <p id="list-count" class="hint"></p>
+        <button id="show-more" class="button" type="button">Show 15 more</button>
+      </div>
+    </section>
+  </div>
+
+  <div id="live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <footer class="footer">
+    <p>All customers and payments are synthetic. The generator plants 32 real problems among 400 customers, so the page always knows the right answer. That is 8% of customers, far more than in real life, where genuine cases are rare and false alarms dominate even more. Country scores come from the <a href="../kyc-risk-engine/">KYC risk engine</a>. Thresholds are illustrative, and a test checks that this page gives the same answers as the Python reference rules.</p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="monitor.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

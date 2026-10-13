@@ -141,6 +141,7 @@ input[type="range"] { width: 100%; margin: 4px 0 0; accent-color: var(--accent);
 .rule { display: grid; grid-template-columns: 44px 1fr; gap: 4px 12px; margin-top: 16px; align-items: start; }
 .rule input { position: absolute; opacity: 0; width: 44px; height: 26px; margin: 0; cursor: pointer; }
 .rule .track {
+  display: block;
   width: 44px; height: 26px; border-radius: 999px; background: var(--rule); position: relative;
   transition: background 0.15s; pointer-events: none; margin-top: 2px;
 }
