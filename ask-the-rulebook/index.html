@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ask the rulebook</title>
+  <meta name="description" content="Ask a question about EU and international anti-money laundering rules. Every answer is an exact quote from the official text, with a citation and a link. No AI writes the answers.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#ask">Skip to the question box</a>
+
+  <header class="masthead">
+    <h1>Ask the rulebook</h1>
+    <p>Ask a question about anti-money laundering (AML) rules. The page finds the passages of the official text that bear on it and shows them word for word, with the article number and a link. No AI model writes the answers, so nothing can be invented. If the rulebook here does not cover your question, it says so.</p>
+  </header>
+
+  <main class="wrap">
+    <form id="ask" class="ask" role="search" autocomplete="off">
+      <label for="q">Your question</label>
+      <div class="ask-row">
+        <input id="q" type="text" maxlength="200" placeholder="For example: how long must we keep customer records?">
+        <button type="submit">Find the rules</button>
+      </div>
+    </form>
+
+    <section aria-label="Suggested questions">
+      <h2>Try one of these</h2>
+      <div id="suggestions" class="chips"></div>
+    </section>
+
+    <section id="out" class="out" aria-live="polite" aria-label="Answer"></section>
+
+    <section class="about" aria-label="About this page">
+      <h2>What this is, and is not</h2>
+      <ul>
+        <li>It is a search over <span id="count"></span> hand-picked passages from three public texts. It does not cover every rule.</li>
+        <li>Quotes are cut from the official text by a program that fails if a quote cannot be found word for word. The plain-language notes are the project author's own writing and are labelled as such.</li>
+        <li>The EU Anti-Money Laundering Regulation applies from 10 July 2027. National laws and your regulator's guidance may differ today.</li>
+        <li>This is not legal advice. It cannot judge a specific customer or transaction.</li>
+      </ul>
+      <h3>Sources</h3>
+      <ul id="sources"></ul>
+    </section>
+  </main>
+
+  <script src="library.js"></script>
+  <script src="rulebook.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

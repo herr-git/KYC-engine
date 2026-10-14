@@ -1,0 +1,299 @@
+{
+ "answer": [
+  {
+   "q": "When do we have to do customer due diligence?",
+   "any": [
+    "amlr-19-1"
+   ]
+  },
+  {
+   "q": "When is KYC required for a one-off transaction?",
+   "any": [
+    "amlr-19-1"
+   ]
+  },
+  {
+   "q": "What is the threshold for crypto-asset service providers?",
+   "any": [
+    "amlr-19-3"
+   ]
+  },
+  {
+   "q": "How long must we keep customer records?",
+   "any": [
+    "amlr-77-3",
+    "fatf-r11"
+   ]
+  },
+  {
+   "q": "How long do we retain transaction records?",
+   "any": [
+    "fatf-r11",
+    "amlr-77-3"
+   ]
+  },
+  {
+   "q": "What information must travel with a crypto transfer?",
+   "any": [
+    "tfr-14-1",
+    "tfr-14-2",
+    "tfr-14-4"
+   ]
+  },
+  {
+   "q": "What is the travel rule?",
+   "any": [
+    "tfr-14-1",
+    "tfr-14-2",
+    "fatf-r16",
+    "fatf-inr15-r10"
+   ]
+  },
+  {
+   "q": "Do the rules apply to transfers to a self-hosted wallet?",
+   "any": [
+    "tfr-14-5",
+    "tfr-14-6"
+   ]
+  },
+  {
+   "q": "What about unhosted wallets above 1000 euro?",
+   "any": [
+    "tfr-14-5"
+   ]
+  },
+  {
+   "q": "What is a politically exposed person?",
+   "any": [
+    "amlr-2-34"
+   ]
+  },
+  {
+   "q": "How long does a former PEP stay high risk?",
+   "any": [
+    "amlr-45-2"
+   ]
+  },
+  {
+   "q": "How often must customer information be refreshed?",
+   "any": [
+    "amlr-26-2"
+   ]
+  },
+  {
+   "q": "What is the limit for cash payments?",
+   "any": [
+    "amlr-80-1"
+   ]
+  },
+  {
+   "q": "When does the new anti-money laundering regulation apply?",
+   "any": [
+    "amlr-90"
+   ]
+  },
+  {
+   "q": "How fast must we report a suspicion?",
+   "any": [
+    "amlr-69-1",
+    "amlr-69-1b",
+    "amlr-71-1"
+   ]
+  },
+  {
+   "q": "Can we carry out a transaction we suspect is criminal?",
+   "any": [
+    "amlr-71-1"
+   ]
+  },
+  {
+   "q": "Can we tell a customer we reported them?",
+   "any": [
+    "amlr-73-1"
+   ]
+  },
+  {
+   "q": "What counts as an unusual transaction?",
+   "any": [
+    "amlr-34-2",
+    "amlr-34-4"
+   ]
+  },
+  {
+   "q": "What is the risk-based approach?",
+   "any": [
+    "fatf-r1-a",
+    "fatf-r1-b",
+    "fatf-r10-rba"
+   ]
+  },
+  {
+   "q": "Can customers have anonymous accounts?",
+   "any": [
+    "fatf-r10-anon",
+    "amlr-79-1"
+   ]
+  },
+  {
+   "q": "What does FATF say about virtual asset service providers?",
+   "any": [
+    "fatf-r15-a",
+    "fatf-r15-b",
+    "fatf-inr15-r10"
+   ]
+  },
+  {
+   "q": "What is the definition of a virtual asset?",
+   "any": [
+    "fatf-glossary-va"
+   ]
+  },
+  {
+   "q": "How must we monitor customers on an ongoing basis?",
+   "any": [
+    "fatf-r10-ongoing",
+    "amlr-26-1",
+    "amlr-34-2"
+   ]
+  },
+  {
+   "q": "What about high-risk countries?",
+   "any": [
+    "fatf-r19",
+    "amlr-33-1",
+    "amlr-33-1b"
+   ]
+  },
+  {
+   "q": "Do I need to identify the person behind a company?",
+   "any": [
+    "amlr-2-28",
+    "amlr-20-1"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "What must a firm do when it cannot complete customer checks?",
+   "any": [
+    "amlr-21-1"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "When can we use simplified due diligence?",
+   "any": [
+    "amlr-33-1"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "Who is a beneficial owner?",
+   "any": [
+    "amlr-2-28"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "Are anonymity enhanced coins allowed?",
+   "any": [
+    "amlr-79-1"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "What does an exchange have to collect about the sender of crypto?",
+   "any": [
+    "tfr-14-1",
+    "tfr-14-2"
+   ],
+   "set": "blind"
+  }
+ ],
+ "refuse": [
+  {
+   "q": "Should I report this customer?",
+   "status": [
+    "advice",
+    "none"
+   ],
+   "no_results_required": false
+  },
+  {
+   "q": "What are the fines in Denmark?",
+   "status": [
+    "scope"
+   ]
+  },
+  {
+   "q": "What does the US Bank Secrecy Act require?",
+   "status": [
+    "scope"
+   ]
+  },
+  {
+   "q": "What penalties apply for breaking the rules?",
+   "status": [
+    "scope"
+   ]
+  },
+  {
+   "q": "Do I need a MiCA licence?",
+   "status": [
+    "scope"
+   ]
+  },
+  {
+   "q": "How does GDPR affect KYC data?",
+   "status": [
+    "scope"
+   ]
+  },
+  {
+   "q": "Write me a poem about the sea",
+   "status": [
+    "none"
+   ]
+  },
+  {
+   "q": "What is the best pizza in Copenhagen?",
+   "status": [
+    "none"
+   ]
+  },
+  {
+   "q": "Is my customer John a money launderer?",
+   "status": [
+    "advice"
+   ],
+   "note_required": true
+  },
+  {
+   "q": "asdf qwer zxcv",
+   "status": [
+    "none"
+   ]
+  },
+  {
+   "q": "Do we need to check sanctions lists?",
+   "status": [
+    "scope"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "What are the rules on correspondent relationships?",
+   "status": [
+    "scope"
+   ],
+   "set": "blind"
+  },
+  {
+   "q": "Are shell banks allowed?",
+   "status": [
+    "scope"
+   ],
+   "set": "blind"
+  }
+ ],
+ "target_hit_at_3": 0.9
+}
