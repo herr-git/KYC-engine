@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Core banking blueprint</title>
+  <meta name="description" content="Choose what you want to offer, such as accounts, a ledger, loans, cards, payments or crypto custody, and see the building blocks you need as a stack and a heat map, which to build or buy, and in what order.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#results-heading">Skip to the results</a>
+
+  <header class="masthead">
+    <h1>Core banking blueprint</h1>
+    <p>A core banking system is a set of building blocks, not one product. Pick what you want to offer. See every block you need, which to build, buy or take from a partner, and in what order.</p>
+    <p class="how">The advice is a visible sum you can read line by line, not a hidden model. It is one author's synthesis of common practice, a way to start a conversation and not a procurement decision. <a href="#about">More</a></p>
+  </header>
+
+  <div class="layout">
+    <aside class="controls" aria-label="Your choices">
+      <section class="group">
+        <h2>Start from</h2>
+        <div id="presets" class="presets"></div>
+        <p id="preset-note" class="hint"></p>
+      </section>
+      <section class="group">
+        <h2>What do you want to offer?</h2>
+        <div id="wants"></div>
+      </section>
+      <section class="group">
+        <h2>Your situation</h2>
+        <div id="situation"></div>
+      </section>
+    </aside>
+
+    <main class="results">
+      <h2 id="results-heading" class="sr-only">Results</h2>
+
+      <section class="summary" aria-label="Summary">
+        <p id="headline" class="headline" aria-live="polite"></p>
+        <div class="kpis">
+          <div class="kpi hero">
+            <span id="kpi-total" class="big">0</span>
+            <span class="kpi-label">building blocks needed</span>
+            <span id="kpi-chosen" class="kpi-sub"></span>
+          </div>
+          <div class="kpi">
+            <h3>What to do with them</h3>
+            <div id="verdict-bar" class="vbar" role="img"></div>
+            <ul id="verdict-legend" class="vlegend"></ul>
+          </div>
+          <div class="kpi">
+            <h3>Where the work sits <span class="note">(bar: relative effort)</span></h3>
+            <div id="phase-bars" class="pbars"></div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="The stack and how it connects">
+        <h3>The stack and how it connects</h3>
+        <p class="hint">Each row is a layer, from what people touch at the top to the ground at the bottom. Colour and shape show the verdict. A thick outline means you chose it. Select a block to see what it relies on and what relies on it.</p>
+        <div class="edge-legend" id="edge-legend"></div>
+        <div id="map" class="map"></div>
+        <div id="sel" class="sel" aria-live="polite"></div>
+      </section>
+
+      <section aria-label="Heat map">
+        <div class="heat-head">
+          <div>
+            <h3>The heat map</h3>
+            <p class="hint">Darker means a higher rating from 0 to 5. Select a row for the detail and the reasons.</p>
+          </div>
+          <label class="sortbox">Sort by
+            <select id="sort">
+              <option value="phase">Build order</option>
+              <option value="verdict">Most to buy first</option>
+              <option value="apart">Most likely to set you apart</option>
+              <option value="legal">Heaviest legal burden</option>
+            </select>
+          </label>
+        </div>
+        <div class="ramp-legend" id="ramp-legend"></div>
+        <div class="scroll"><table id="heat" class="heat"></table></div>
+      </section>
+
+      <section aria-label="Walk throughs">
+        <h3>How the blocks work together</h3>
+        <p class="hint">Two everyday journeys. Each step names the block that does the work. Faded steps use a block that is not in your plan.</p>
+        <div id="flows"></div>
+      </section>
+
+      <section aria-label="Plain text version">
+        <details class="export">
+          <summary>Copy as plain text</summary>
+          <textarea id="export" readonly rows="14" aria-label="Plain text version of your plan"></textarea>
+          <p><button id="copy" type="button">Copy</button> <span id="copy-status" role="status"></span></p>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <section class="notes wrapper" aria-label="Market practice notes">
+    <h2>How modern core banking is built</h2>
+    <div class="vs" aria-label="An old core compared with a modular core">
+      <figure class="vs-card">
+        <figcaption>Old core: one program</figcaption>
+        <div class="mono"><span>Accounts</span><span>Products</span><span>Ledger</span><span>Payments</span><span>Screens</span></div>
+        <p>Change one thing and everything has to be tested again.</p>
+      </figure>
+      <figure class="vs-card">
+        <figcaption>Modular core: parts on a shared event stream</figcaption>
+        <div class="mod">
+          <span>Accounts</span><span>Products</span><span>Ledger</span><span>Payments</span><span>Screens</span>
+          <i class="bus">events and interfaces</i>
+        </div>
+        <p>Replace one part without touching the rest.</p>
+      </figure>
+    </div>
+    <div id="notes" class="note-grid"></div>
+    <h2>Key terms</h2>
+    <dl id="glossary" class="glossary"></dl>
+  </section>
+
+  <section id="about" class="about wrapper" aria-label="About this page">
+    <h2>What this is, and is not</h2>
+    <ul>
+      <li>It is the author's synthesis of common practice, drafted with AI assistance and meant to be argued with. It quotes no source and is not official guidance.</li>
+      <li>The ratings behind the heat map are judgement calls. The verdict is a plain sum of them with your answers, and every line is shown.</li>
+      <li>Products named are names the author knows of, not recommendations or a market survey. Check what each does today.</li>
+      <li>Rules and dates mentioned should be checked against the current official text.</li>
+      <li>It cannot replace an architecture review, a supplier selection with real hard cases, or advice from your regulator and lawyers.</li>
+      <li>Nothing here uses any real firm's data or configuration.</li>
+    </ul>
+  </section>
+
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+
+  <script src="catalog.js"></script>
+  <script src="planner.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

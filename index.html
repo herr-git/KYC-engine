@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI Portfolio</title>
-  <meta name="description" content="Hands-on projects that show how AI can be applied in regulated financial services.">
+  <title>Fintech systems lab</title>
+  <meta name="description" content="Product thinking on how regulated financial systems are designed, built and checked, with working demos on synthetic data.">
   <style>
     :root { --paper:#edf0ec; --ink:#15232b; --soft:#4a5a62; --accent:#1f4e5f; --rule:#c7d0ca; color-scheme: light dark; }
     @media (prefers-color-scheme: dark) { :root { --paper:#0f1a20; --ink:#e6ede9; --soft:#a5b4ba; --accent:#7fc4d8; --rule:#2c3f48; } }
@@ -17,18 +17,34 @@
     li { border-top: 1px solid var(--rule); padding: 16px 0; }
     li:last-child { border-bottom: 1px solid var(--rule); }
     li a { font-weight: 700; font-size: 1.15rem; }
+    h2 { font-size: 0.8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 36px 0 4px; }
+    h2 + .sub { margin: 0 0 10px; font-size: 0.97rem; }
     li span { display: block; color: var(--soft); font-size: 0.97rem; margin-top: 2px; }
   </style>
 </head>
 <body>
   <main>
-    <h1>AI portfolio</h1>
-    <p>Hands-on projects that show how AI can be applied in regulated financial services, with the controls a regulated firm would expect. All data is synthetic.</p>
+    <h1>Fintech systems lab</h1>
+    <p>Product thinking on how regulated financial systems are designed, built and checked, with working demos. Built with AI assistance. All data is synthetic or public.</p>
+
+    <h2>1. Compliance engines</h2>
+    <p class="sub">Checks a regulated firm runs on customers and payments.</p>
     <ul>
+      <li><a href="kyc-risk-engine/">KYC risk engine</a><span>The explainable customer scoring engine behind the next page, with market research and tests.</span></li>
       <li><a href="risk-model-playground/">Risk model playground</a><span>Move the weights, cut-offs and safety rules of a customer risk model and watch 300 customers change band.</span></li>
       <li><a href="transaction-monitoring-simulator/">Transaction monitoring simulator</a><span>Set alert rules on fake payments and see real problems caught against false alarms.</span></li>
+    </ul>
+
+    <h2>2. Rules and sources</h2>
+    <p class="sub">What the law actually says.</p>
+    <ul>
       <li><a href="ask-the-rulebook/">Ask the rulebook</a><span>Ask about anti-money laundering rules and get exact quotes from the official text, with citations.</span></li>
-      <li><a href="kyc-risk-engine/">KYC risk engine</a><span>The explainable scoring engine behind both pages, with market research and tests.</span></li>
+    </ul>
+
+    <h2>3. Platform architecture</h2>
+    <p class="sub">The systems the checks run on.</p>
+    <ul>
+      <li><a href="core-banking-blueprint/">Core banking blueprint</a><span>Choose what you want to offer and see the building blocks, how they connect, what to build or buy, and in what order.</span></li>
     </ul>
   </main>
 </body>
