@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment route planner</title>
+  <meta name="description" content="Pick a sender country, a receiver country, an amount and what matters most. See the shortest paths through local clearing schemes, custodian banks and currency conversions, with cost, speed, the compliance checks and the rules that bind each route.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#results-heading">Skip to the results</a>
+
+  <header class="masthead">
+    <h1>Payment route planner</h1>
+    <p>Money does not fly from one country to another. It moves through accounts, local clearing schemes and currency conversions. Pick a corridor and see the best paths, what each costs, how long it takes, which checks run and which rules bind.</p>
+    <p class="how">Fees, speeds and limits are reasonable round numbers for a demonstration, not quotes. The bank list comes from an open registry plus a short curated list. <a href="#about">More</a></p>
+  </header>
+
+  <div class="layout">
+    <aside class="controls" aria-label="Your choices">
+      <section class="group">
+        <h2>Start from</h2>
+        <div id="corridors" class="presets"></div>
+      </section>
+      <section class="group">
+        <h2>The transfer</h2>
+        <div id="transfer"></div>
+      </section>
+      <section class="group">
+        <h2>Your accounts</h2>
+        <p class="hint">Which currencies your firm can hold, and how it reaches each local scheme.</p>
+        <div id="footprints" class="presets"></div>
+        <p id="footprint-note" class="hint"></p>
+        <details class="edit-modes">
+          <summary>Change accounts one by one</summary>
+          <div id="modes"></div>
+        </details>
+      </section>
+    </aside>
+
+    <main class="results">
+      <h2 id="results-heading" class="sr-only">Results</h2>
+
+      <section class="summary" aria-label="Summary">
+        <p id="headline" class="headline" aria-live="polite"></p>
+        <div id="kpis" class="kpis"></div>
+      </section>
+
+      <section aria-label="Routes">
+        <h3>The best routes</h3>
+        <p class="hint">Each route is a chain: the sender, one or more accounts (pools), and the receiver. The coloured links are the moves between them. Select a route to see its checks and rules below.</p>
+        <div id="legend" class="legend"></div>
+        <div id="routes" class="routes"></div>
+        <div id="excluded" class="hint"></div>
+      </section>
+
+      <section aria-label="What would change the answer">
+        <h3>What would change the answer</h3>
+        <p class="hint">Access you could add to your accounts, and what it would save on this corridor.</p>
+        <div id="acquire" class="acquire"></div>
+      </section>
+
+      <section aria-label="Corridor heat map">
+        <div class="heat-head">
+          <div>
+            <h3>Every corridor at once</h3>
+            <p class="hint">The best route for each sender (rows) and receiver (columns), with your accounts and the settings on the left. Darker costs more or takes longer. Select a cell to load that corridor.</p>
+          </div>
+          <div class="heat-ctl">
+            <label class="sortbox">Show
+              <select id="metric">
+                <option value="cost">Total cost, percent</option>
+                <option value="time">Typical time</option>
+              </select>
+            </label>
+            <label class="sortbox"><input type="checkbox" id="mx-all"> As if I had an account in every currency</label>
+          </div>
+        </div>
+        <div class="ramp-legend" id="ramp-legend"></div>
+        <div class="scroll"><table id="matrix" class="heat matrix"></table></div>
+      </section>
+
+      <section aria-label="Transfer flow blueprint">
+        <h3>How a transfer runs inside the firm</h3>
+        <p class="hint">Seven stages from request to report. Select a stage to see what happens, the checks that bite there, and which blocks of the Core banking blueprint do the work.</p>
+        <div id="stages" class="stages"></div>
+        <div id="stage-detail" class="stage-detail" aria-live="polite"></div>
+      </section>
+
+      <section aria-label="Rules and checks">
+        <h3>Rules that bind this route</h3>
+        <p class="hint">Headline summaries by country. They are not legal advice and they age. Check the official text. The Ask the rulebook project quotes two of these in full.</p>
+        <div id="rules" class="rules"></div>
+        <h3 class="spaced">Compliance checks on this route</h3>
+        <div id="checks" class="checks"></div>
+      </section>
+
+      <section aria-label="Plain text version">
+        <details class="export">
+          <summary>Copy as plain text</summary>
+          <textarea id="export" readonly rows="14" aria-label="Plain text version of the route"></textarea>
+          <p><button id="copy" type="button">Copy</button> <span id="copy-status" role="status"></span></p>
+        </details>
+      </section>
+    </main>
+  </div>
+
+  <section class="notes wrapper" aria-label="Reference">
+    <h2>Schemes and custodian banks by currency</h2>
+    <p class="hint" id="dir-hint"></p>
+    <div id="directory" class="directory"></div>
+    <h2>How cross-border payments are built</h2>
+    <div id="notes" class="note-grid"></div>
+    <h2>Key terms</h2>
+    <dl id="glossary" class="glossary"></dl>
+  </section>
+
+  <section id="about" class="about wrapper" aria-label="About this page">
+    <h2>What this is, and is not</h2>
+    <ul>
+      <li>Fees, speeds, spreads and limits are illustrative round numbers chosen for a demonstration. They are not quotes and not current. The scheme names and rough behaviour come from public knowledge.</li>
+      <li>The route score is a plain sum of the moves. Every number that moves it is shown, and you can change it in <code>catalog.js</code>.</li>
+      <li>The bank list comes from the open bank registry in the schwifty package (MIT licence) for the countries it covers, plus a curated list of well known banks elsewhere. It is not a directory, it can be out of date, and being listed is not an endorsement.</li>
+      <li>Rules are summarised at headline level and some are changing. Check the current official text. Nothing here is legal advice.</li>
+      <li>Real routing also depends on contracts, partner coverage, daily cut off times, risk appetite and live scheme status. This page cannot know those.</li>
+      <li>No real customer data and no data from any real firm is used.</li>
+    </ul>
+  </section>
+
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+
+  <script src="catalog.js"></script>
+  <script src="banks.js"></script>
+  <script src="router.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

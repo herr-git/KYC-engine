@@ -29,6 +29,7 @@ The systems the checks run on.
 | Project | What it shows |
 |---|---|
 | [core-banking-blueprint](core-banking-blueprint/) | The building blocks of a modern core banking and crypto platform. Choose what you want to offer and see every block you need, how the blocks connect, whether to build, buy or use a partner for each one with the score shown line by line, and a sensible order of work |
+| [payment-route-planner](payment-route-planner/) | Pick a sender, a receiver and an amount across 20 currencies. See the cheapest, fastest or simplest route through local clearing schemes, currency conversions and partner banks, with cost and time per leg, the checks and rules that apply, and what opening one more account would change |
 
 ## Ground rules for everything in this repository
 
