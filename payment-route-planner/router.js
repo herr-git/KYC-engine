@@ -7,6 +7,8 @@
  *   convert  from one pool to another, with a liquidity provider
  *   pay out  from a pool to the receiver, over the receiver's local scheme
  *   swift    from a pool to the receiver through a chain of correspondent banks (the fallback)
+ *   stablecoin (optional)  on ramp into a coin, send it on a chain, off ramp into the receiver's local scheme,
+ *            or draw from a prefunded float at the receiving end
  *
  * Every move has a cost and a time. A route is a sequence of moves, and its score is a plain sum of the
  * moves, so the page can show it line by line. The same search fills the corridor heat map.
@@ -76,6 +78,7 @@
     return out;
   }
 
+  var STABLE_CHOICES = ["off", "auto"].concat(Catalog.COINS.map(function (c) { return c.id; }));
   function normalise(req) {
     var r = {
       from: req.from, to: req.to,
@@ -85,6 +88,8 @@
       delivery: req.delivery === "wallet" ? "wallet" : "bank",
       modes: {}
     };
+    r.stable = STABLE_CHOICES.indexOf(req.stable) >= 0 ? req.stable : "off";
+    r.buffer = r.stable !== "off" && !!req.buffer;
     var base = req.modes || presetModes(req.footprint || "eu-pi");
     CCYS.forEach(function (c) { r.modes[c] = base[c] === "direct" || base[c] === "partner" ? base[c] : "none"; });
     r.destCcy = req.destCcy && JUR_BY_CCY[req.destCcy] ? req.destCcy : JUR[r.to].ccy;
@@ -159,6 +164,109 @@
     };
   }
 
+
+  // ---------- stablecoin legs ----------
+  var ST = M.stable, COIN = {};
+  Catalog.COINS.forEach(function (c) { COIN[c.id] = c; });
+  function coverageOf(jurId) { return Catalog.COVERAGE[jurId] || "limited"; }
+  function hasInstant(ccy) { return SCHEMES_BY_CCY[ccy].some(function (s) { return s.hours === "24x7" || s.kind === "instant"; }); }
+  function pctBps(n) { return n / 10000; }
+
+  // Local money in the pool becomes coins at a licensed on ramp.
+  function onrampLeg(h, coin, R) {
+    var j = JUR_BY_CCY[h], cov = coverageOf(j.id);
+    if (cov === "none") return null;
+    var peg = COIN[coin].peg, conv = h !== peg;
+    var wait = hasInstant(h) ? 0 : M.wait.rtgs[WHEN[R.when]];
+    var partner = R.modes[h] === "partner" ? partnerCost(h, R.amount) * 0.5 : 0;
+    var bps = ST.onramp[cov] + (conv ? fxPair(h, peg) : 0);
+    return {
+      type: "onramp", coin: coin, ccy: h, from: h, to: coin, converts: conv, mode: R.modes[h], cover: cov,
+      cost: { fees: ST.onramp.fixed + R.amount * pctBps(ST.onramp[cov]), fx: conv ? R.amount * pctBps(fxPair(h, peg)) : 0, partner: partner, tax: 0 },
+      minutes: { best: ST.onSpeed.best, typ: ST.onSpeed.typ + wait, worst: ST.onSpeed.worst + wait },
+      wait: wait, hands: 1 + (partner ? 1 : 0), bps: bps,
+      text: "Buy " + coin + " with " + h + " at a licensed on ramp" + (conv ? " (includes the conversion)" : ""),
+      jur: j.id
+    };
+  }
+  // Coins move between two wallets on a blockchain.
+  function chainLeg(coin, chainId, R) {
+    var ch = Catalog.CHAINS[chainId];
+    return {
+      type: "chain", coin: coin, chain: chainId, ccy: null,
+      cost: { fees: ch.fee + R.amount * pctBps(ST.chainOps), fx: 0, partner: 0, tax: 0 },
+      minutes: { best: ch.speed.best, typ: ch.speed.typ, worst: ch.speed.worst },
+      wait: 0, hands: 1,
+      text: "Send " + coin + " on " + ch.name + " to the wallet at the receiving end", jur: null
+    };
+  }
+  function bestChain(coin, R) {
+    var best = null;
+    COIN[coin].chains.forEach(function (id) {
+      var l = chainLeg(coin, id, R); l.w = weightOf(l, R);
+      if (!best || l.w < best.w) best = l;
+    });
+    return best;
+  }
+  // Coins become local money and go out over the receiver's local scheme, by a partner who holds the licence there.
+  function offrampLegs(coin, R, fits) {
+    var out = [], dest = JUR[R.to], cov = coverageOf(dest.id);
+    if (cov === "none" || dest.ccy !== R.destCcy) return out;
+    var peg = COIN[coin].peg, conv = dest.ccy !== peg;
+    SCHEMES_BY_CCY[dest.ccy].forEach(function (s) {
+      if ((R.delivery === "wallet") !== (s.kind === "wallet")) return;
+      if (!fits(s)) return;
+      var wait = waitMinutes(s, R.when), spread = conv ? fxPair(peg, dest.ccy) : 0;
+      var tax = conv && TAX_BPS[dest.ccy] ? R.amount * pctBps(TAX_BPS[dest.ccy]) : 0;
+      out.push({
+        type: "offramp", coin: coin, scheme: s.id, schemeName: s.name, ccy: dest.ccy, converts: conv, cover: cov, mode: "partner",
+        cost: { fees: ST.offramp.fixed + R.amount * pctBps(ST.offramp[cov]) + s.fixed + R.amount * pctBps(s.bps), fx: R.amount * pctBps(spread), partner: 0, tax: tax },
+        minutes: { best: ST.offSpeed.best + s.speed.best, typ: ST.offSpeed.typ + s.speed.typ + wait, worst: ST.offSpeed.worst + s.speed.worst + wait },
+        wait: wait, hands: 2,
+        text: "Sell " + coin + " for " + dest.ccy + " at a local partner, who pays out by " + s.name + (conv ? " (includes the conversion)" : ""),
+        jur: dest.id
+      });
+    });
+    return out;
+  }
+  // Coins become local money inside one of your own pools (treasury).
+  function offrampPoolLeg(coin, b, R) {
+    var j = JUR_BY_CCY[b], cov = coverageOf(j.id);
+    if (cov === "none") return null;
+    var peg = COIN[coin].peg, conv = b !== peg;
+    var tax = conv && TAX_BPS[b] ? R.amount * pctBps(TAX_BPS[b]) : 0;
+    return {
+      type: "offramp", coin: coin, ccy: b, converts: conv, cover: cov, mode: R.modes[b], toPool: true,
+      cost: { fees: ST.offramp.fixed + R.amount * pctBps(ST.offramp[cov]), fx: conv ? R.amount * pctBps(fxPair(peg, b)) : 0, partner: 0, tax: tax },
+      minutes: { best: ST.offSpeed.best, typ: ST.offSpeed.typ, worst: ST.offSpeed.worst },
+      wait: 0, hands: 1,
+      text: "Sell " + coin + " for " + b + " into your own " + b + " pool" + (conv ? " (includes the conversion)" : ""),
+      jur: j.id
+    };
+  }
+  // A float of coins already sitting at the receiving end replaces the on ramp and the chain on the customer's clock.
+  function bufferLeg(on, ch, R) {
+    var B = ST.buffer, carry = B.carryPercentPerYear * 100 * B.floatDays / 365 + B.reserveBps;
+    return {
+      type: "buffer", coin: on.coin, chain: ch.chain, ccy: on.ccy, from: on.from, to: on.coin, converts: on.converts, mode: on.mode, carryBps: carry,
+      cost: { fees: B.netting * (on.cost.fees + ch.cost.fees) + R.amount * pctBps(carry), fx: B.netting * on.cost.fx, partner: B.netting * on.cost.partner, tax: 0 },
+      minutes: { best: B.speed.best, typ: B.speed.typ, worst: B.speed.worst },
+      wait: 0, hands: 1,
+      text: "Draw " + on.coin + " from a prefunded float at the receiving end. Includes a holding cost and a share of the batched top up",
+      jur: null
+    };
+  }
+  function totalsOf(legs, R) {
+    var cost = { fees: 0, fx: 0, partner: 0, tax: 0 }, min = { best: 0, typ: 0, worst: 0 }, hands = 0, fxHops = 0;
+    legs.forEach(function (l) {
+      Object.keys(cost).forEach(function (k) { cost[k] += l.cost[k]; });
+      min.best += l.minutes.best; min.typ += l.minutes.typ; min.worst += l.minutes.worst;
+      hands += l.hands; if (l.type === "fx" || l.converts) fxHops++;
+    });
+    var total = cost.fees + cost.fx + cost.partner + cost.tax;
+    return { usd: total, pct: total / R.amount * 100, bps: total / R.amount * 10000, cost: cost, minutes: min, hands: hands, fxHops: fxHops };
+  }
+
   function weightOf(leg, R) {
     var pr = M.priorities[R.priority];
     var total = leg.cost.fees + leg.cost.fx + leg.cost.partner + leg.cost.tax;
@@ -167,7 +275,7 @@
 
   // Build everything the search needs for one request.
   function context(req, fxShare) {
-    var R = normalise(req), ctx = { R: R, fx: fxShare || {}, payin: [], finals: {}, excluded: [], holds: [] };
+    var R = normalise(req), ctx = { R: R, fx: fxShare || {}, payin: [], finals: {}, excluded: [], holds: [], coinSpecs: [] };
     var seenEx = {};
     function skip(s, why) { if (!seenEx[s.id]) { seenEx[s.id] = true; ctx.excluded.push({ scheme: s.id, name: s.name, ccy: s.ccy, why: why }); } }
     function fits(s) {
@@ -200,31 +308,52 @@
       if (R.delivery !== "wallet") { var sw = swiftLeg(h, R); sw.w = weightOf(sw, R); list.push(sw); }
       ctx.finals[h] = list;
     });
+    // Stablecoin paths start from the sender's own pool, so they need an account in the sender's currency.
+    if (R.stable !== "off" && R.modes[sendCcy] !== "none") {
+      var coins = R.stable === "auto" ? Catalog.COINS : [COIN[R.stable]];
+      coins.forEach(function (c) {
+        var eu = JUR[R.from].eea || JUR[R.to].eea;
+        if (!c.mica && eu) { ctx.excluded.push({ scheme: "coin-" + c.id, name: c.name, ccy: c.id, why: "not authorised under the EU crypto law, so a regulated firm cannot offer it" }); return; }
+        if (c.id && coverageOf(JUR[R.from].id) === "none") return;
+        var on = onrampLeg(sendCcy, c.id, R); if (!on) return;
+        var offs = offrampLegs(c.id, R, fits); if (!offs.length) return;
+        var ch = bestChain(c.id, R);
+        on.w = weightOf(on, R); offs.forEach(function (o) { o.w = weightOf(o, R); });
+        var mid;
+        if (R.buffer) { var bf = bufferLeg(on, ch, R); bf.w = weightOf(bf, R); mid = [bf]; }
+        else mid = [on, ch];
+        ctx.coinSpecs.push({ coin: c.id, mid: mid, offs: offs });
+      });
+    }
     return ctx;
   }
 
+  function coinNode(l, which) {
+    var ch = l.chain ? Catalog.CHAINS[l.chain].name : "";
+    if (l.type === "buffer") return { kind: "coin", ccy: l.coin, bank: "float at the receiving end", note: "prefunded", chain: ch };
+    if (which === "send") return { kind: "coin", ccy: l.coin, bank: "wallet at a qualified custodian", note: "sending end", chain: ch };
+    return { kind: "coin", ccy: l.coin, bank: "on " + ch, note: "receiving end", chain: ch };
+  }
   function routeFrom(legs, ctx) {
-    var R = ctx.R, cost = { fees: 0, fx: 0, partner: 0, tax: 0 }, min = { best: 0, typ: 0, worst: 0 }, hands = 0, fxHops = 0;
-    legs.forEach(function (l) {
-      Object.keys(cost).forEach(function (k) { cost[k] += l.cost[k]; });
-      min.best += l.minutes.best; min.typ += l.minutes.typ; min.worst += l.minutes.worst;
-      hands += l.hands; if (l.type === "fx") fxHops++;
-    });
-    var total = sum(Object.keys(cost).map(function (k) { return cost[k]; }));
+    var R = ctx.R, tot = totalsOf(legs, R);
     var nodes = [{ kind: "src", label: "Sender in " + (JUR[R.from].short || JUR[R.from].name), ccy: JUR[R.from].ccy }];
+    var coin = null;
     legs.forEach(function (l) {
       if (l.type === "payin") nodes.push(pool(l.ccy, R.modes));
       else if (l.type === "fx") nodes.push(pool(l.to, R.modes));
+      else if (l.type === "onramp") { nodes.push(coinNode(l, "send")); coin = { id: l.coin, buffer: false }; }
+      else if (l.type === "chain") { nodes.push(coinNode(l, "recv")); coin.chain = l.chain; }
+      else if (l.type === "buffer") { nodes.push(coinNode(l)); coin = { id: l.coin, buffer: true, chain: l.chain }; }
     });
     nodes.push({ kind: "dst", label: "Receiver in " + (JUR[R.to].short || JUR[R.to].name), ccy: R.destCcy });
     var holds = nodes.filter(function (n) { return n.kind === "hold"; }).map(function (n) { return n.ccy; });
     var last = legs[legs.length - 1];
     return {
-      legs: legs, nodes: nodes, holds: holds,
-      final: last.type === "payout" ? last.schemeName : "bank network (SWIFT)",
-      totals: { usd: total, pct: total / R.amount * 100, bps: total / R.amount * 10000, cost: cost, minutes: min, hands: hands, fxHops: fxHops },
+      legs: legs, nodes: nodes, holds: holds, coin: coin,
+      final: last.type === "payout" ? last.schemeName : last.type === "offramp" ? last.schemeName + " (via " + last.coin + ")" : "bank network (SWIFT)",
+      totals: tot,
       score: sum(legs.map(function (l) { return l.w; })),
-      shape: holds.join(">") + "|" + last.type + (last.scheme || "")
+      shape: holds.join(">") + "|" + last.type + (last.scheme || "") + (coin ? "|coin" : "")
     };
   }
 
@@ -249,6 +378,12 @@
         });
       });
     });
+    ctx.coinSpecs.forEach(function (cs) {
+      ctx.payin.forEach(function (p) {
+        if (p.ccy !== cs.mid[0].from && p.ccy !== cs.mid[0].ccy) return;
+        cs.offs.forEach(function (o) { push([p].concat(cs.mid, [o])); });
+      });
+    });
     best.sort(function (u, v) { return u.s - v.s; });
     return best.slice(0, keep || 400).map(function (b) { return routeFrom(b.legs, ctx); });
   }
@@ -266,7 +401,7 @@
   function touched(route, R) {
     var set = {}; set[R.from] = true; set[R.to] = true;
     route.legs.forEach(function (l) {
-      if (l.ccy) set[JUR_BY_CCY[l.ccy].id] = true;
+      if (l.ccy && JUR_BY_CCY[l.ccy]) set[JUR_BY_CCY[l.ccy].id] = true;
       if (l.type === "fx") set[JUR_BY_CCY[l.from].id] = true;
     });
     return Object.keys(set);
@@ -276,11 +411,11 @@
     var jurs = touched(route, R), checks = [], lastLeg = route.legs[route.legs.length - 1];
     var cross = R.from !== R.to;
     function add(id, detail) {
-      var c = Catalog.CHECKS.filter(function (x) { return x.id === id; })[0];
+      var c = Catalog.CHECKS.concat(Catalog.CRYPTO_CHECKS).filter(function (x) { return x.id === id; })[0];
       checks.push({ id: id, name: c.name, stage: c.stage, plain: c.plain, detail: detail });
     }
     add("cdd", "Sender is in " + JUR[R.from].name + ". The firm's own customer rules decide how much to ask for.");
-    var payout = lastLeg.type === "payout" ? SCHEME[lastLeg.scheme] : null;
+    var coin = route.coin, payout = lastLeg.type === "payout" || lastLeg.type === "offramp" ? SCHEME[lastLeg.scheme] : null;
     if (payout && payout.check) add("payee", payout.name + ": " + payout.check + ".");
     else if (lastLeg.type === "swift") add("payee", "The bank network offers no name check. Validate the account format and rely on the receiving bank.");
     else add("payee", (payout ? payout.name : "The scheme") + " offers no name check. Validate the account format.");
@@ -293,6 +428,7 @@
       if (jurs.indexOf("US") >= 0) t.push("US legs: details travel with transfers of 3,000 dollars or more.");
       if (jurs.indexOf("EA") >= 0 || jurs.indexOf("DK") >= 0) t.push("European legs: details travel with every transfer, with no minimum.");
       if (!t.length) t.push("Many countries apply no minimum. The global standard allows a small one.");
+      if (coin) t.push("The coin leg is a crypto transfer, where the same details travel from the first unit in the European Union and the United Kingdom and above 3,000 dollars in the United States. The receiving provider must be able to receive them.");
       add("travel", t.join(" "));
     }
     var ctl = jurs.filter(function (id) { return JUR[id].control >= 1; });
@@ -308,13 +444,24 @@
     if (taxLeg) add("tax", "A placeholder of " + (TAX_BPS[taxLeg.to] / 100).toFixed(2) + " percent is included for conversion into " + taxLeg.to + ". The real rate depends on the purpose.");
     add("monitor", "Corridor " + JUR[R.from].name + " to " + JUR[R.to].name + ". The Transaction monitoring simulator shows how rules on a corridor behave.");
     add("safeguard", "Pools used: " + route.holds.map(function (c) { var b = custodianOf(c); return c + " at " + (b ? b.name : "a custodian"); }).join(", ") + ".");
+    if (coin) add("custody", coin.id + " is held in segregated wallets at a qualified custodian (for example " + Catalog.STABLE_EXAMPLES.custodians.slice(0, 3).join(", ") + "), and matched to the ledger every day.");
     var lic = [];
     route.legs.forEach(function (l) {
-      if (l.type === "swift" || l.type === "fx") return;
+      if (l.type === "swift" || l.type === "fx" || l.type === "onramp" || l.type === "chain" || l.type === "buffer" || l.type === "offramp") return;
       var name = JUR_BY_CCY[l.ccy].short || JUR_BY_CCY[l.ccy].name;
       lic.push(name + (l.mode === "partner" ? ": a local partner holds the licence. The contract must cover who is liable." : ": you need your own licence or direct membership."));
     });
     if (lic.length) add("licence", lic.join(" "));
+    if (coin) {
+      var sendJ = JUR[R.from], dstJ = JUR[R.to], cv = function (j) { return coverageOf(j.id); };
+      var ch = Catalog.CHAINS[coin.chain].name, ci = COIN[coin.id];
+      add("wallet", "Screen the sending and receiving addresses on " + ch + " before the coins move and again when they land. Stop on any link to a sanctioned or high risk address.");
+      add("coin", coin.id + " is issued by " + ci.issuer + ". " + (ci.mica ? "It qualifies as an electronic money token under the European Union crypto law." : "It does not qualify under the European Union crypto law, which matters only if an EU party is involved.") +
+        " Cash out in " + (dstJ.short || dstJ.name) + " is rated " + cv(dstJ) + ", and cash in from " + (sendJ.short || sendJ.name) + " is rated " + cv(sendJ) + ".");
+      add("peg", Catalog.MODEL.stable.pegWatch + " Hold no more than a set share of one issuer.");
+      add("vasp", (sendJ.short || sendJ.name) + ": the on ramp needs a crypto licence of its own or a licensed partner. " + (dstJ.short || dstJ.name) + ": a licensed local partner sells the coins and pays out, and the contract must cover who is liable.");
+      if (coin.buffer) add("float", "Size the float to about " + Catalog.MODEL.stable.buffer.floatDays + " days of this corridor's volume (an assumption), top it up in batches when it falls below 30 percent, and cap how much sits with any one partner or custodian.");
+    }
     var rep = [R.from, R.to].filter(function (id, i, a) { return REPORTS[id] && a.indexOf(id) === i; });
     if (rep.length) add("report", rep.map(function (id) { return (JUR[id].short || JUR[id].name) + ": " + REPORTS[id] + "."; }).join(" "));
     if ((JUR[R.from].eea || R.from === "GB") && !JUR[R.to].eea) add("data", "Personal data goes from " + (JUR[R.from].short || JUR[R.from].name) + " to " + (JUR[R.to].short || JUR[R.to].name) + ".");
@@ -323,7 +470,13 @@
     jurs.forEach(function (id) {
       (Catalog.REGS[id] || []).forEach(function (r) { regs.push({ jur: id, jurName: JUR[id].short || JUR[id].name, name: r[0], why: r[1] }); });
     });
+    if (coin) {
+      jurs.forEach(function (id) {
+        (Catalog.CRYPTO_REGS[id] || []).forEach(function (r) { regs.push({ jur: id, jurName: JUR[id].short || JUR[id].name, name: r[0], why: r[1], crypto: true }); });
+      });
+    }
     var globalRegs = Catalog.GLOBAL_REGS.map(function (r) { return { name: r[0], why: r[1] }; });
+    if (coin) Catalog.CRYPTO_GLOBAL_REGS.forEach(function (r) { globalRegs.push({ name: r[0], why: r[1], crypto: true }); });
     if ((JUR[R.from].eea || R.from === "GB") && !JUR[R.to].eea) globalRegs.push({ name: Catalog.DATA_REG[0], why: Catalog.DATA_REG[1] });
     return { jurisdictions: jurs, checks: checks, regs: regs, globalRegs: globalRegs };
   }
@@ -332,7 +485,8 @@
   function stageNotes(route, R, comp) {
     var legs = route.legs, fx = legs.filter(function (l) { return l.type === "fx"; });
     var rails = legs.filter(function (l) { return l.schemeName; }).map(function (l) { return l.schemeName; });
-    var last = legs[legs.length - 1];
+    var last = legs[legs.length - 1], coin = route.coin;
+    if (coin) return coinStageNotes(route, R, comp);
     return [
       "Quote about " + money(route.totals.usd) + " in total (" + route.totals.pct.toFixed(2) + " percent), arriving " + minutesText(route.totals.minutes.typ) + ".",
       comp.checks.length + " checks apply. Screening covers " + comp.jurisdictions.length + " jurisdictions.",
@@ -341,6 +495,22 @@
       (rails.length ? rails.join(" and ") : "Bank network") + (last.type === "swift" ? " plus a chain of about " + last.banks + " bank" + (last.banks > 1 ? "s" : "") + "." : "."),
       "Match " + route.holds.length + " pool" + (route.holds.length > 1 ? "s" : "") + " to bank statements every day. Watch for returns on " + (last.type === "swift" ? "the bank network" : last.schemeName) + ".",
       (comp.checks.filter(function (c) { return c.id === "report"; }).length ? "A regulator report is due. " : "No extra regulator report from the catalog. ") + "Keep the audit trail for every leg."
+    ];
+  }
+
+  function coinStageNotes(route, R, comp) {
+    var legs = route.legs, last = legs[legs.length - 1], coin = route.coin, ch = Catalog.CHAINS[coin.chain].name;
+    var send = JUR[R.from].ccy, ci = COIN[coin.id];
+    var chainLeg = legs.filter(function (l) { return l.type === "chain"; })[0];
+    return [
+      "Quote about " + money(route.totals.usd) + " in total (" + route.totals.pct.toFixed(2) + " percent), arriving " + minutesText(route.totals.minutes.typ) + ". The quote includes the coin legs and the network fee.",
+      comp.checks.length + " checks apply, including wallet screening and the travel rule message to the receiving provider. Screening covers " + comp.jurisdictions.length + " jurisdictions.",
+      "Chosen: " + send + " to " + coin.id + (coin.buffer ? " from a prefunded float" : " on " + ch) + ", then " + last.schemeName + ". " + Catalog.MODEL.stable.pegWatch + " Keep the best bank route ready as a fallback.",
+      coin.buffer ? "Draw " + coin.id + " from the float at the receiving end. The float is topped up in batches on weekdays, outside the customer's wait."
+        : "Buy " + coin.id + " with the " + send + " pool" + (legs[1] && legs[1].converts ? " (this includes the conversion)" : "") + ". The coins sit in a segregated wallet until the next step.",
+      coin.buffer ? "The off ramp partner pays out through " + last.schemeName + " straight away. Nothing waits for a blockchain." : "Send on " + ch + ", about " + minutesText(chainLeg.minutes.typ).replace("about ", "") + " to be final, then the off ramp partner pays out through " + last.schemeName + ".",
+      "Match three records every day: bank statements, on chain wallet balances and the ledger. Watch for returns on " + last.schemeName + ".",
+      (comp.checks.filter(function (c) { return c.id === "report"; }).length ? "A regulator report is due. " : "No extra regulator report from the catalog. ") + "Keep the audit trail for every leg, including the transaction hash."
     ];
   }
 
@@ -373,7 +543,7 @@
       (mode === "none" ? ["partner", "direct"] : ["direct"]).forEach(function (next) {
         var modes = {}; CCYS.forEach(function (k) { modes[k] = R.modes[k]; });
         modes[c] = next;
-        var ctx = context({ from: R.from, to: R.to, amount: R.amount, priority: R.priority, when: R.when, delivery: R.delivery, destCcy: R.destCcy, modes: modes });
+        var ctx = context({ from: R.from, to: R.to, amount: R.amount, priority: R.priority, when: R.when, delivery: R.delivery, destCcy: R.destCcy, modes: modes, stable: R.stable, buffer: R.buffer });
         var top = topRoutes(ctx, 1)[0];
         if (!top || top.holds.indexOf(c) < 0) return;      // the new access would not even be used
         var gain = baseScore === Infinity ? 1e9 : baseScore - top.score;
@@ -414,6 +584,55 @@
         : "No route fits. Check the amount against scheme caps and the delivery choice.";
     }
     out.acquire = acquisitions(R, routes[0] || null);
+    out.ways = ways(R);
+    return out;
+  }
+
+  // The same transfer three ways: banks only, with a stablecoin, and with a stablecoin plus a prefunded float.
+  function ways(R) {
+    var coin = R.stable === "off" ? "auto" : R.stable;
+    function best(stable, buffer) {
+      var ctx = context({ from: R.from, to: R.to, amount: R.amount, priority: R.priority, when: R.when, delivery: R.delivery, destCcy: R.destCcy, modes: R.modes, stable: stable, buffer: buffer });
+      var top = topRoutes(ctx, 1)[0];
+      return top || null;
+    }
+    var bank = best("off", false), withCoin = best(coin, false), withFloat = best(coin, true);
+    function row(id, label, r) {
+      if (!r) return { id: id, label: label, none: true };
+      return { id: id, label: label, usesCoin: !!r.coin, pct: r.totals.pct, usd: r.totals.usd, typ: r.totals.minutes.typ, best: r.totals.minutes.best, worst: r.totals.minutes.worst,
+        title: r.coin ? r.coin.id + (r.coin.buffer ? " float" : " on " + Catalog.CHAINS[r.coin.chain].name) : "bank route" };
+    }
+    var rows = [row("bank", "Banks only", bank), row("coin", "With a stablecoin", withCoin), row("float", "Stablecoin with a prefunded float", withFloat)];
+    var why = null;
+    if (!withCoin || !withCoin.coin) {
+      var dj = JUR[R.to], sj = JUR[R.from];
+      if (coverageOf(dj.id) === "none" || coverageOf(sj.id) === "none") why = "Stablecoin legs are not allowed in " + (coverageOf(dj.id) === "none" ? (dj.short || dj.name) : (sj.short || sj.name)) + ".";
+      else if (R.modes[sj.ccy] === "none") why = "A stablecoin route starts from your own account in the sender's currency, and there is none.";
+      else if (R.destCcy !== dj.ccy) why = "A stablecoin route pays out in the receiver's local currency, and this transfer asks for another.";
+      else why = "A bank route scores better here. The coin legs add an on ramp, a cash out spread or a slower local scheme.";
+    }
+    return { rows: rows, why: why };
+  }
+
+  // Treasury: move value between two of your own pools, by a bank conversion or through a stablecoin.
+  function treasury(req) {
+    var R = normalise({ from: req.from || "US", to: req.to || "US", amount: req.amount, priority: req.priority, when: req.when, modes: req.modes, footprint: req.footprint }), a = req.poolFrom, b = req.poolTo, out = { from: a, to: b, amount: R.amount, bank: null, coin: null, why: null };
+    if (!JUR_BY_CCY[a] || !JUR_BY_CCY[b] || a === b) { out.why = "Choose two different pools."; return out; }
+    var fx = fxLeg(a, b, R); fx.w = weightOf(fx, R);
+    out.bank = { legs: [fx], totals: totalsOf([fx], R), nodes: [pool(a, R.modes), pool(b, R.modes)] };
+    var best = null, eu = JUR_BY_CCY[a].eea || JUR_BY_CCY[b].eea;
+    Catalog.COINS.forEach(function (c) {
+      if (!c.mica && eu) return;
+      var on = onrampLeg(a, c.id, R), off = offrampPoolLeg(c.id, b, R); if (!on || !off) return;
+      var ch = bestChain(c.id, R);
+      [on, off].forEach(function (l) { l.w = weightOf(l, R); });
+      var legs = [on, ch, off], score = sum(legs.map(function (l) { return l.w; }));
+      if (!best || score < best.score) best = { coin: c.id, chain: ch.chain, legs: legs, score: score };
+    });
+    if (best) out.coin = { coin: best.coin, chain: best.chain, legs: best.legs, totals: totalsOf(best.legs, R), nodes: [pool(a, R.modes), coinNode(best.legs[0], "send"), coinNode(best.legs[1], "recv"), pool(b, R.modes)] };
+    else out.why = "No stablecoin path: cash in or cash out is not allowed for one of the two currencies.";
+    out.carryBps = ST.buffer.carryPercentPerYear * 100 * ST.buffer.floatDays / 365 + ST.buffer.reserveBps;
+    out.weekendNote = R.when === "weekend" ? "The foreign exchange market is shut, so the bank conversion carries a wider spread. Coin markets stay open." : null;
     return out;
   }
 
@@ -425,10 +644,10 @@
     ids.forEach(function (from) {
       ids.forEach(function (to) {
         if (from === to) { cells[from + ">" + to] = { same: true }; return; }
-        var r = { from: from, to: to, amount: base.amount, priority: base.priority, when: base.when, modes: base.modes, delivery: "bank" };
+        var r = { from: from, to: to, amount: base.amount, priority: base.priority, when: base.when, modes: base.modes, delivery: "bank", stable: base.stable, buffer: base.buffer };
         var ctx = context(r, shared);
         var top = search(ctx, 1)[0];
-        cells[from + ">" + to] = top ? { ok: true, pct: top.totals.pct, usd: top.totals.usd, minutes: top.totals.minutes.typ, holds: top.holds, final: top.final, hands: top.totals.hands } : { ok: false };
+        cells[from + ">" + to] = top ? { ok: true, pct: top.totals.pct, usd: top.totals.usd, minutes: top.totals.minutes.typ, holds: top.holds, final: top.final, coin: top.coin ? top.coin.id : null, hands: top.totals.hands } : { ok: false };
       });
     });
     return { ids: ids, cells: cells };
@@ -449,7 +668,7 @@
   return {
     JUR: JUR, JUR_BY_CCY: JUR_BY_CCY, SCHEME: SCHEME, SCHEMES_BY_CCY: SCHEMES_BY_CCY, BANK: BANK, CCYS: CCYS,
     normalise: normalise, context: context, search: search, topRoutes: topRoutes, plan: plan, matrix: matrix,
-    directory: directory, complianceFor: complianceFor, presetModes: presetModes, fxPair: fxPair, weightOf: weightOf,
+    directory: directory, treasury: treasury, COIN: COIN, complianceFor: complianceFor, presetModes: presetModes, fxPair: fxPair, weightOf: weightOf,
     money: money, minutesText: minutesText, custodianOf: custodianOf, settlementOf: settlementOf, round: round
   };
 });

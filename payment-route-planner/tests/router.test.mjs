@@ -290,3 +290,125 @@ test("plain text helpers", () => {
   assert.equal(Router.money(12.345), "$12.35");
   assert.equal(Router.money(1234.5), "$1,235");
 });
+
+// ---------- stablecoins ----------
+const coinBase = { from: "EA", to: "BR", amount: 5000, priority: "cheapest", when: "weekend", footprint: "eu-pi", stable: "auto" };
+const coinPlan = (o) => Router.plan(Object.assign({}, coinBase, o));
+
+test("stablecoin data is complete", () => {
+  for (const c of Catalog.COINS) {
+    assert.ok(["USD", "EUR"].includes(c.peg), c.id);
+    for (const ch of c.chains) assert.ok(Catalog.CHAINS[ch], c.id + " chain " + ch);
+  }
+  for (const j of J) {
+    assert.ok(["good", "limited", "none"].includes(Catalog.COVERAGE[j.id]), j.id + " coverage");
+    assert.ok((Catalog.CRYPTO_REGS[j.id] || []).length >= 1, j.id + " crypto rules");
+  }
+  assert.equal(Catalog.CRYPTO_STAGES.length, 7);
+  const bp = require("../../core-banking-blueprint/catalog.js");
+  const names = new Set(bp.COMPONENTS.map((b) => b.name));
+  for (const s of Catalog.CRYPTO_STAGES) for (const b of s.blocks) assert.ok(names.has(b), "unknown block: " + b);
+  for (const c of Catalog.CRYPTO_CHECKS) assert.ok(c.stage >= 1 && c.stage <= 7, c.id);
+});
+
+test("stablecoin is off unless asked for, and the buffer needs a coin", () => {
+  const off = Router.plan(Object.assign({}, coinBase, { stable: "off", buffer: true }));
+  assert.equal(off.request.stable, "off");
+  assert.equal(off.request.buffer, false);
+  assert.ok(off.routes.every((r) => !r.coin));
+  assert.equal(Router.normalise({ from: "EA", to: "BR", stable: "nonsense" }).stable, "off");
+});
+
+test("a coin route is built from on ramp, chain and off ramp, or float and off ramp", () => {
+  const p = coinPlan({});
+  const r = p.routes.find((x) => x.coin);
+  assert.ok(r, "a coin route exists");
+  assert.deepEqual(r.legs.map((l) => l.type), ["payin", "onramp", "chain", "offramp"]);
+  const f = coinPlan({ buffer: true }).routes.find((x) => x.coin);
+  assert.deepEqual(f.legs.map((l) => l.type), ["payin", "buffer", "offramp"]);
+  assert.equal(f.nodes.length, f.legs.length + 1);
+  assert.equal(r.nodes.length, r.legs.length + 1);
+});
+
+test("at the weekend a stablecoin beats the bank network on a thin corridor", () => {
+  const p = coinPlan({});
+  const bank = p.ways.rows[0], coin = p.ways.rows[1], fl = p.ways.rows[2];
+  assert.ok(coin.usesCoin && fl.usesCoin);
+  assert.ok(coin.typ < bank.typ / 10, "far faster");
+  assert.ok(coin.pct < bank.pct, "cheaper");
+  assert.ok(fl.typ <= coin.typ, "a float is at least as fast");
+});
+
+test("totals on a coin route equal the sum of its legs", () => {
+  for (const o of [{}, { buffer: true }, { priority: "fastest" }]) {
+    for (const r of coinPlan(o).routes) {
+      const usd = r.legs.reduce((t, l) => t + l.cost.fees + l.cost.fx + l.cost.partner + l.cost.tax, 0);
+      assert.ok(Math.abs(usd - r.totals.usd) < 1e-9);
+      const typ = r.legs.reduce((t, l) => t + l.minutes.typ, 0);
+      assert.ok(Math.abs(typ - r.totals.minutes.typ) < 1e-9);
+    }
+  }
+});
+
+test("USDT is left out when a European party is involved, and allowed elsewhere", () => {
+  const eu = coinPlan({ stable: "USDT" });
+  assert.ok(eu.routes.every((r) => !r.coin), "no coin route");
+  assert.ok(eu.excluded.some((e) => /EU crypto law/.test(e.why) && e.ccy === "USDT"));
+  const us = Router.plan({ from: "US", to: "NG", amount: 200, priority: "cheapest", when: "weekend", footprint: "global", stable: "USDT" });
+  assert.ok(us.routes[0].coin && us.routes[0].coin.id === "USDT");
+});
+
+test("no coin route touches a country where the services are banned", () => {
+  const p = Router.plan({ from: "EA", to: "CN", amount: 1000, priority: "balanced", when: "weekday", footprint: "global", stable: "auto" });
+  assert.ok(p.routes.every((r) => !r.coin));
+  assert.ok(/China/.test(p.ways.why));
+  const q = Router.plan({ from: "CN", to: "EA", amount: 1000, priority: "balanced", when: "weekday", footprint: "bank", stable: "auto" });
+  assert.ok(q.routes.every((r) => !r.coin));
+});
+
+test("a limited cash out market costs more than a good one", () => {
+  const find = (to) => Router.search(Router.context({ from: "US", to, amount: 1000, priority: "cheapest", when: "weekday", footprint: "bank", stable: "USDC" }), 400).find((r) => r.coin);
+  const good = find("AE"), limited = find("PH");
+  const off = (r) => r.legs[r.legs.length - 1];
+  assert.equal(off(good).cover, "good");
+  assert.equal(off(limited).cover, "limited");
+  assert.ok(off(limited).cost.fees > off(good).cost.fees);
+});
+
+test("crypto checks and rules appear only when a coin is used", () => {
+  const p = coinPlan({ buffer: true });
+  const r = p.routes.find((x) => x.coin);
+  const ids = r.compliance.checks.map((c) => c.id);
+  for (const id of ["wallet", "coin", "peg", "custody", "vasp", "float"]) assert.ok(ids.includes(id), id);
+  assert.ok(r.compliance.regs.some((g) => g.crypto && /MiCA/.test(g.name)));
+  assert.ok(r.compliance.globalRegs.some((g) => g.crypto));
+  assert.equal(r.stages.length, 7);
+  const bankRoute = p.routes.find((x) => !x.coin);
+  const bankIds = bankRoute.compliance.checks.map((c) => c.id);
+  for (const id of ["wallet", "coin", "peg", "custody", "vasp", "float"]) assert.ok(!bankIds.includes(id), id);
+  assert.ok(bankRoute.compliance.regs.every((g) => !g.crypto));
+  const noFloat = coinPlan({}).routes.find((x) => x.coin).compliance.checks.map((c) => c.id);
+  assert.ok(!noFloat.includes("float"));
+});
+
+test("treasury compares a bank conversion with a stablecoin", () => {
+  const t = Router.treasury({ poolFrom: "EUR", poolTo: "BRL", amount: 100000, priority: "cheapest", when: "weekend", footprint: "bank" });
+  assert.ok(t.bank.totals.usd > 0 && t.coin.totals.usd > 0);
+  assert.deepEqual(t.coin.legs.map((l) => l.type), ["onramp", "chain", "offramp"]);
+  assert.equal(t.bank.nodes.length, 2);
+  assert.equal(t.coin.nodes.length, 4);
+  const wk = Router.treasury({ poolFrom: "EUR", poolTo: "BRL", amount: 100000, priority: "cheapest", when: "weekend", footprint: "bank" });
+  const wd = Router.treasury({ poolFrom: "EUR", poolTo: "BRL", amount: 100000, priority: "cheapest", when: "weekday", footprint: "bank" });
+  assert.ok(wk.bank.totals.usd > wd.bank.totals.usd, "bank conversion costs more at the weekend");
+  assert.ok(Math.abs(wk.coin.totals.usd - wd.coin.totals.usd) < 1e-6, "the coin leg is the same any day");
+  const cn = Router.treasury({ poolFrom: "EUR", poolTo: "CNY", amount: 1000, priority: "cheapest", when: "weekday", footprint: "bank" });
+  assert.equal(cn.coin, null);
+  assert.ok(cn.why);
+});
+
+test("the heat map follows the stablecoin setting", () => {
+  const off = Router.matrix({ from: "EA", to: "BR", amount: 5000, priority: "fastest", when: "weekend", footprint: "eu-pi" });
+  const on = Router.matrix({ from: "EA", to: "BR", amount: 5000, priority: "fastest", when: "weekend", footprint: "eu-pi", stable: "auto" });
+  assert.ok(on.cells["EA>BR"].minutes < off.cells["EA>BR"].minutes);
+  assert.equal(on.cells["EA>BR"].coin, "USDC");
+});

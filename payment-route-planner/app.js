@@ -37,7 +37,8 @@
   var state = {
     from: first.from, to: first.to, amount: first.amount, priority: first.priority, when: first.when,
     delivery: "bank", destCcy: "", fp: first.footprint, modes: R.presetModes(first.footprint),
-    sel: 0, stage: 2, metric: "cost", mxAll: false
+    sel: 0, stage: 2, metric: "cost", mxAll: false,
+    stable: first.stable || "off", buffer: !!first.buffer, tf: "", tt: ""
   };
 
   // ---------- address ----------
@@ -61,6 +62,10 @@
     if (p.s !== undefined && +p.s >= 1 && +p.s <= 7) state.stage = +p.s;
     if (p.mt === "time") state.metric = "time";
     if (p.ma === "1") state.mxAll = true;
+    if (p.sc && ["auto", "USDC", "EURC", "USDT"].indexOf(p.sc) >= 0) { state.stable = p.sc; state.buffer = p.sb === "1"; }
+    else if (p.sc === undefined && p.f) { state.stable = "off"; state.buffer = false; }
+    if (p.tf && R.JUR_BY_CCY[p.tf]) state.tf = p.tf;
+    if (p.tt && R.JUR_BY_CCY[p.tt]) state.tt = p.tt;
   }
   function writeHash() {
     var parts = ["f=" + state.from, "t=" + state.to, "a=" + state.amount, "p=" + state.priority, "w=" + state.when, "m=" + modeString()];
@@ -71,6 +76,9 @@
     if (state.stage !== 2) parts.push("s=" + state.stage);
     if (state.metric === "time") parts.push("mt=time");
     if (state.mxAll) parts.push("ma=1");
+    if (state.stable !== "off") { parts.push("sc=" + state.stable); if (state.buffer) parts.push("sb=1"); }
+    if (state.tf) parts.push("tf=" + state.tf);
+    if (state.tt) parts.push("tt=" + state.tt);
     try { history.replaceState(null, "", "#" + parts.join("&")); } catch (e) { /* the address is a convenience only */ }
   }
 
@@ -103,6 +111,7 @@
       b.addEventListener("click", function () {
         state.from = c.from; state.to = c.to; state.amount = c.amount; state.priority = c.priority; state.when = c.when;
         state.fp = c.footprint; state.modes = R.presetModes(c.footprint); state.delivery = "bank"; state.destCcy = ""; state.sel = 0;
+        state.stable = c.stable || "off"; state.buffer = !!c.buffer; state.tf = ""; state.tt = "";
         refresh();
       });
       cor.appendChild(b);
@@ -152,6 +161,21 @@
     ds.addEventListener("change", function () { state.destCcy = ds.value; state.sel = 0; refresh(); });
     t.appendChild(ds);
 
+    var sb = $("stable");
+    sb.appendChild(el("label", "ctl-label", "Coin")).setAttribute("for", "sel-stable");
+    var ss = el("select", "field"); ss.id = "sel-stable";
+    [["off", "Off: banks only"], ["auto", "On: pick the best coin"], ["USDC", "USDC only (dollar)"], ["EURC", "EURC only (euro)"], ["USDT", "USDT only (dollar)"]].forEach(function (x) { var o = el("option", "", x[1]); o.value = x[0]; ss.appendChild(o); });
+    ss.addEventListener("change", function () { state.stable = ss.value; if (state.stable === "off") state.buffer = false; state.sel = 0; refresh(); });
+    sb.appendChild(ss);
+    var bl = el("label", "sortbox chk"); var bi = el("input"); bi.type = "checkbox"; bi.id = "chk-buffer";
+    bi.addEventListener("change", function () { state.buffer = bi.checked; state.sel = 0; refresh(); });
+    bl.appendChild(bi); bl.appendChild(el("span", "", "Prefunded float at the receiving end (buffer)")); sb.appendChild(bl);
+    sb.appendChild(el("p", "hint", "")).id = "stable-help";
+
+    var tfs = $("sel-tf"), tts = $("sel-tt");
+    tfs.addEventListener("change", function () { state.tf = tfs.value; refresh(); });
+    tts.addEventListener("change", function () { state.tt = tts.value; refresh(); });
+
     var fp = $("footprints");
     C.FOOTPRINTS.forEach(function (f) {
       var b = el("button", "preset", f.name); b.type = "button"; b.dataset.id = f.id;
@@ -193,7 +217,7 @@
     ds.disabled = state.delivery === "wallet";
     Array.prototype.forEach.call($("corridors").children, function (b) {
       var c = C.CORRIDORS.filter(function (x) { return x.id === b.dataset.id; })[0];
-      b.setAttribute("aria-pressed", String(c.from === state.from && c.to === state.to && c.amount === state.amount && c.priority === state.priority && c.when === state.when && c.footprint === state.fp));
+      b.setAttribute("aria-pressed", String(c.from === state.from && c.to === state.to && c.amount === state.amount && c.priority === state.priority && c.when === state.when && c.footprint === state.fp && (c.stable || "off") === state.stable && !!c.buffer === state.buffer));
     });
     Array.prototype.forEach.call($("footprints").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.id === state.fp)); });
     var f = C.FOOTPRINTS.filter(function (x) { return x.id === state.fp; })[0];
@@ -203,15 +227,42 @@
     });
     $("metric").value = state.metric;
     $("mx-all").checked = state.mxAll;
+    if (state.stable === "off") state.buffer = false;
+    $("sel-stable").value = state.stable;
+    $("chk-buffer").checked = state.buffer; $("chk-buffer").disabled = state.stable === "off";
+    $("stable-help").textContent = state.stable === "off" ? "Off. Routes use banks and local schemes only. See \"Three ways to send this\" for what a coin would change."
+      : state.buffer ? "The coins are already at the receiving end, so the customer does not wait for the chain. The planner charges a holding cost and a share of the batched top up."
+      : "Local money becomes coins, the coins move on a blockchain, and a local partner turns them back into local money and pays out.";
+    syncTreasuryPools();
+  }
+  var poolKey = "";
+  function heldCcys() { return J.filter(function (j) { return state.modes[j.ccy] !== "none"; }).map(function (j) { return j.ccy; }); }
+  function syncTreasuryPools() {
+    var held = heldCcys(), key = held.join(",");
+    var tfs = $("sel-tf"), tts = $("sel-tt");
+    if (key !== poolKey) {
+      poolKey = key;
+      [tfs, tts].forEach(function (s) { s.textContent = ""; held.forEach(function (c) { var o = el("option", "", c + " " + R.JUR_BY_CCY[c].ccyName); o.value = c; s.appendChild(o); }); });
+    }
+    var pair = treasuryPair(held);
+    tfs.value = pair[0] || ""; tts.value = pair[1] || "";
+  }
+  function treasuryPair(held) {
+    held = held || heldCcys();
+    var send = JB[state.from].ccy, dest = state.destCcy || JB[state.to].ccy;
+    var a = held.indexOf(state.tf) >= 0 ? state.tf : (held.indexOf(send) >= 0 ? send : held[0]);
+    var b = held.indexOf(state.tt) >= 0 && state.tt !== a ? state.tt : (held.indexOf(dest) >= 0 && dest !== a ? dest : held.filter(function (c) { return c !== a; })[0]);
+    return [a, b];
   }
 
   function request() {
-    return { from: state.from, to: state.to, amount: state.amount, priority: state.priority, when: state.when, delivery: state.delivery, destCcy: state.destCcy || undefined, modes: state.modes };
+    return { from: state.from, to: state.to, amount: state.amount, priority: state.priority, when: state.when, delivery: state.delivery, destCcy: state.destCcy || undefined, modes: state.modes, stable: state.stable, buffer: state.buffer };
   }
 
   // ---------- summary ----------
   function routeTitle(r) {
     var last = r.legs[r.legs.length - 1];
+    if (r.coin) return r.holds.join(" to ") + " to " + r.coin.id + (r.coin.buffer ? " float" : " on " + C.CHAINS[r.coin.chain].name) + ", then " + short(last.schemeName);
     if (last.type === "payout") return r.holds.join(" to ") + ", then " + short(last.schemeName);
     return r.holds.join(" to ") + ", then the bank network" + (last.converts ? " (the receiver's bank converts)" : "");
   }
@@ -234,11 +285,16 @@
   // ---------- routes ----------
   function buildLegend() {
     var lg = $("legend");
-    [["payin", "Pay in: sender to your account"], ["fx", "Convert: one currency to another"], ["payout", "Pay out: your account to the receiver by a local scheme"], ["swift", "Bank network: a chain of correspondent banks"]].forEach(function (x) {
+    [["payin", "Pay in: sender to your account"], ["fx", "Convert: one currency to another"], ["payout", "Pay out: to the receiver by a local scheme"], ["swift", "Bank network: a chain of correspondent banks"], ["coin", "Stablecoin: buy coins, send them on a blockchain, or draw from a float"]].forEach(function (x) {
       var s = el("span", "k-" + x[0]); s.appendChild(el("i", "shape")); s.appendChild(document.createTextNode(x[1])); lg.appendChild(s);
     });
   }
+  function kindOf(l) { return l.type === "onramp" || l.type === "chain" || l.type === "buffer" ? "coin" : l.type === "offramp" ? "payout" : l.type; }
   function legTag(l) {
+    if (l.type === "onramp") return "Buy " + l.coin;
+    if (l.type === "chain") return C.CHAINS[l.chain].name;
+    if (l.type === "buffer") return l.coin + " float";
+    if (l.type === "offramp" && l.toPool) return "Sell " + l.coin;
     if (l.type === "fx") return "Convert";
     if (l.type === "swift") return "Bank network";
     var base = short(l.schemeName);
@@ -250,15 +306,16 @@
   }
   function buildChain(r) {
     var ol = el("ol", "chain" + (r.nodes.length >= 5 ? " dense" : ""));
-    ol.setAttribute("aria-label", "Route: " + routeTitle(r));
+    ol.setAttribute("aria-label", "Route: " + (r.title || routeTitle(r)));
     r.nodes.forEach(function (n, i) {
       var li = el("li", "node " + n.kind + (n.mode === "partner" ? " partner" : ""));
       if (n.kind === "src") { li.appendChild(el("b", "", n.ccy)); li.appendChild(el("span", "", n.label)); li.classList.add("end"); }
       else if (n.kind === "dst") { li.appendChild(el("b", "", n.ccy)); li.appendChild(el("span", "", n.label)); li.classList.add("end"); }
+      else if (n.kind === "coin") { li.appendChild(el("b", "", n.ccy)); li.appendChild(el("span", "", n.bank)); li.appendChild(el("em", "", n.note)); }
       else { li.appendChild(el("b", "", n.ccy)); li.appendChild(el("span", "", n.bank)); li.appendChild(el("em", "", MODE_WORD[n.mode])); }
       ol.appendChild(li);
       if (i < r.legs.length) {
-        var l = r.legs[i], lk = el("li", "link k-" + l.type);
+        var l = r.legs[i], lk = el("li", "link k-" + kindOf(l));
         var tag = el("span", "tag"); tag.appendChild(el("i", "shape")); tag.appendChild(document.createTextNode(legTag(l)));
         lk.appendChild(tag); lk.appendChild(el("span", "when", shortTime(l.minutes.typ)));
         lk.title = l.text; ol.appendChild(lk);
@@ -272,7 +329,7 @@
     var total = r.legs.reduce(function (t, l) { return t + valueOf(l); }, 0);
     st.style.width = Math.max(4, scale(total)) + "%";
     r.legs.forEach(function (l) {
-      var seg = el("i", "k-" + l.type); seg.style.width = (valueOf(l) / total * 100) + "%";
+      var seg = el("i", "k-" + kindOf(l)); seg.style.width = (valueOf(l) / total * 100) + "%";
       attachTip(seg, function () { return [l.text, R.money(legTotal(l)) + ", typical " + R.minutesText(l.minutes.typ)]; });
       st.appendChild(seg);
     });
@@ -291,7 +348,7 @@
     var head = el("tr"); ["Move", "Fees", "Conversion", "Partner", "Tax", "Typical time"].forEach(function (h, i) { var th = el("th", "", h); if (i > 0) th.className = "n"; head.appendChild(th); });
     t.appendChild(head);
     r.legs.forEach(function (l) {
-      var tr = el("tr"), td = el("td"); var tag = el("span", "k-" + l.type); tag.appendChild(el("i", "shape")); td.appendChild(tag); td.appendChild(document.createTextNode(" " + l.text)); tr.appendChild(td);
+      var tr = el("tr"), td = el("td"); var tag = el("span", "k-" + kindOf(l)); tag.appendChild(el("i", "shape")); td.appendChild(tag); td.appendChild(document.createTextNode(" " + l.text)); tr.appendChild(td);
       [l.cost.fees, l.cost.fx, l.cost.partner, l.cost.tax].forEach(function (v) { tr.appendChild(el("td", "n", v ? R.money(v) : "")); });
       tr.appendChild(el("td", "n", shortTime(l.minutes.typ) + (l.wait ? " (incl. " + shortTime(l.wait) + " wait)" : "")));
       t.appendChild(tr);
@@ -377,8 +434,8 @@
   var TIME_BINS = [[5, "under 5 min"], [60, "5 min to 1 h"], [360, "1 to 6 h"], [1440, "6 to 24 h"], [Infinity, "a day or more"]];
   function bin(bins, v) { for (var i = 0; i < bins.length; i++) if (v < bins[i][0]) return i + 1; return bins.length; }
   function matrixData() {
-    var req = request(), modes = state.mxAll ? R.presetModes("bank") : req.modes, key = JSON.stringify([req.amount, req.priority, req.when, modes]);
-    if (mxCache.key !== key) { mxCache.key = key; mxCache.data = R.matrix({ from: req.from, to: req.to, amount: req.amount, priority: req.priority, when: req.when, modes: modes }); }
+    var req = request(), modes = state.mxAll ? R.presetModes("bank") : req.modes, key = JSON.stringify([req.amount, req.priority, req.when, modes, req.stable, req.buffer]);
+    if (mxCache.key !== key) { mxCache.key = key; mxCache.data = R.matrix({ from: req.from, to: req.to, amount: req.amount, priority: req.priority, when: req.when, modes: modes, stable: req.stable, buffer: req.buffer }); }
     return mxCache.data;
   }
   function renderMatrixView() {
@@ -423,6 +480,111 @@
     });
   }
 
+
+  // ---------- three ways ----------
+  function renderWays(plan) {
+    var box = $("ways"), line = $("ways-line"), why = $("ways-why"); box.textContent = ""; line.textContent = ""; why.textContent = "";
+    var W = plan.ways, rows = W.rows;
+    var cur = state.stable === "off" ? "bank" : state.buffer ? "float" : "coin";
+    var ok = rows.filter(function (r) { return !r.none; });
+    if (!ok.length) { line.textContent = "No route is available in any of the three ways with these accounts."; return; }
+    var maxPct = Math.max.apply(null, ok.map(function (r) { return r.pct; }));
+    var maxTyp = Math.max.apply(null, ok.map(function (r) { return r.typ; }));
+    var bank = rows[0], coin = rows[1], fl = rows[2];
+    if (!bank.none && coin && !coin.none && coin.usesCoin) {
+      var dp = bank.pct - coin.pct, dt = bank.typ - coin.typ;
+      line.textContent = "With a stablecoin the cost goes from " + pct(bank.pct) + " to " + pct(coin.pct) + " percent and the arrival from " + R.minutesText(bank.typ) + " to " + R.minutesText(coin.typ) + "." +
+        (fl && !fl.none && fl.usesCoin ? " A prefunded float brings it to " + pct(fl.pct) + " percent and " + R.minutesText(fl.typ) + "." : "");
+      if (dp < 0 && dt <= 0) line.textContent = "A stablecoin does not help on this corridor. It costs " + pct(coin.pct) + " percent against " + pct(bank.pct) + " by banks.";
+    } else if (bank.none && coin && !coin.none && coin.usesCoin) {
+      line.textContent = "Banks alone give no route with these accounts. A stablecoin opens one: " + pct(coin.pct) + " percent, arriving " + R.minutesText(coin.typ) + ".";
+    } else if (!bank.none) {
+      line.textContent = "Banks alone are the best choice here: " + pct(bank.pct) + " percent, arriving " + R.minutesText(bank.typ) + ".";
+    }
+    if (W.why) why.textContent = W.why;
+    rows.forEach(function (w) {
+      var b = el("button", "way" + (w.usesCoin ? " coin" : "") + (w.none ? " none" : "")); b.type = "button"; b.setAttribute("aria-pressed", String(w.id === cur));
+      var l = el("div"); var t = el("b", "", w.label); if (w.id === cur) t.appendChild(el("span", "cur", "shown below")); l.appendChild(t);
+      l.appendChild(el("small", "", w.none ? "No route with these accounts" : w.title)); b.appendChild(l);
+      if (w.none || (w.id !== "bank" && !w.usesCoin)) {
+        var n = el("div", "m", w.none ? "" : "No coin route is better than the bank route"); n.style.gridColumn = "span 2"; b.appendChild(n);
+      } else {
+        var m1 = el("div", "m"); var t1 = el("span", "t"), f1 = el("span", "f"); f1.style.width = (w.pct / maxPct * 100) + "%"; t1.appendChild(f1);
+        m1.appendChild(t1); var s1 = el("span"); s1.appendChild(el("b", "", pct(w.pct) + " percent")); s1.appendChild(document.createTextNode(" (" + R.money(w.usd) + ")")); m1.appendChild(s1);
+        var m2 = el("div", "m"); var t2 = el("span", "t"), f2 = el("span", "f"); f2.style.width = (Math.sqrt(w.typ) / Math.sqrt(maxTyp) * 100) + "%"; t2.appendChild(f2);
+        m2.appendChild(t2); var s2 = el("span"); s2.appendChild(el("b", "", R.minutesText(w.typ))); s2.appendChild(document.createTextNode(", worst " + shortTime(w.worst))); m2.appendChild(s2);
+        b.appendChild(m1); b.appendChild(m2);
+        b.setAttribute("aria-label", w.label + ": " + pct(w.pct) + " percent, typical " + R.minutesText(w.typ));
+      }
+      if (!w.none) b.addEventListener("click", function () {
+        if (w.id === "bank") { state.stable = "off"; state.buffer = false; }
+        else { if (state.stable === "off") state.stable = "auto"; state.buffer = w.id === "float"; }
+        state.sel = 0; refresh();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  // ---------- treasury ----------
+  function renderTreasury() {
+    var box = $("treasury"); box.textContent = ""; box.className = "treasury";
+    var held = heldCcys();
+    if (held.length < 2) { box.appendChild(el("p", "acq-none", "Hold at least two currencies to compare ways of moving value between pools.")); return; }
+    var pair = treasuryPair(held);
+    var T = R.treasury({ poolFrom: pair[0], poolTo: pair[1], amount: state.amount, priority: state.priority, when: state.when, modes: state.modes });
+    if (!T.bank) { box.appendChild(el("p", "acq-none", T.why)); return; }
+    function card(title, o, kind) {
+      var c = el("div", "tr-card"); c.appendChild(el("h4", "", title));
+      var route = { nodes: o.nodes, legs: o.legs, holds: [], title: title };
+      c.appendChild(buildChain(route));
+      var n = el("div", "nums");
+      [["Cost", pct(o.totals.pct) + " percent (" + R.money(o.totals.usd) + ")"], ["Typical time", R.minutesText(o.totals.minutes.typ)], ["Worst case", R.minutesText(o.totals.minutes.worst)]].forEach(function (x) { var s = el("span"); s.appendChild(document.createTextNode(x[0] + " ")); s.appendChild(el("b", "", x[1])); n.appendChild(s); });
+      c.appendChild(n); return c;
+    }
+    box.appendChild(card("Bank conversion", T.bank));
+    if (T.coin) {
+      box.appendChild(card("Through " + T.coin.coin + " on " + C.CHAINS[T.coin.chain].name, T.coin));
+      var dc = T.coin.totals.pct - T.bank.totals.pct, dt = T.bank.totals.minutes.typ - T.coin.totals.minutes.typ;
+      var v = el("p", "tr-verdict");
+      var cheaper = dc > 0.005 ? "bank" : dc < -0.005 ? "coin" : "same", faster = dt > 1 ? "coin" : dt < -1 ? "bank" : "same";
+      var who = { bank: "The bank conversion", coin: "The stablecoin" };
+      var msg;
+      if (cheaper === faster && cheaper !== "same") msg = who[cheaper] + " wins on both: cheaper by " + pct(Math.abs(dc)) + " percentage points and faster by " + R.minutesText(Math.abs(dt)) + ".";
+      else if (cheaper === "same" && faster === "same") msg = "The two cost about the same and take about as long.";
+      else {
+        var parts = [];
+        if (cheaper !== "same") parts.push(who[cheaper].toLowerCase() + " is cheaper by " + pct(Math.abs(dc)) + " percentage points");
+        if (faster !== "same") parts.push(who[faster].toLowerCase() + " is faster by " + R.minutesText(Math.abs(dt)));
+        msg = parts.join(", and ") + ".";
+        msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+      }
+      v.textContent = msg + (T.weekendNote ? " " + T.weekendNote : "");
+      v.style.gridColumn = "1 / -1"; box.appendChild(v);
+    } else {
+      box.appendChild(el("p", "tr-verdict", T.why));
+    }
+    var h = el("p", "hint", "Holding coins as a standing buffer costs about " + T.carryBps.toFixed(1) + " basis points per transfer in this model (" + C.MODEL.stable.buffer.carryPercentPerYear + " percent a year of idle money over a " + C.MODEL.stable.buffer.floatDays + " day float, plus " + C.MODEL.stable.buffer.reserveBps + " for coin risk). It buys payouts that do not wait for banks to open.");
+    h.style.gridColumn = "1 / -1"; box.appendChild(h);
+  }
+
+  // ---------- stablecoin reference ----------
+  function renderStableRef() {
+    var box = $("stable-ref"); box.textContent = "";
+    $("stable-hint").textContent = C.STABLE_EXAMPLES.note;
+    var b1 = el("div", "box"); b1.appendChild(el("h4", "", "Coins"));
+    C.COINS.forEach(function (c) { var d = el("div"); d.appendChild(el("b", "", c.name + " (" + c.peg + ") ")); d.appendChild(document.createTextNode("issued by " + c.issuer + ". " + c.note)); b1.appendChild(d); });
+    box.appendChild(b1);
+    var b2 = el("div", "box"); b2.appendChild(el("h4", "", "Chains used in the model"));
+    Object.keys(C.CHAINS).forEach(function (k) { var ch = C.CHAINS[k]; var d = el("div"); d.appendChild(el("b", "", ch.name + " ")); d.appendChild(document.createTextNode("about " + R.money(ch.fee) + " per transfer, typically final in " + R.minutesText(ch.speed.typ).replace("about ", "about ") + ".")); b2.appendChild(d); });
+    b2.appendChild(el("p", "meta", "Qualified custodians, as examples of the kind of firm that holds the keys: " + C.STABLE_EXAMPLES.custodians.join(", ") + "."));
+    box.appendChild(b2);
+    var b3 = el("div", "box wide"); b3.appendChild(el("h4", "", "How easy it is to turn coins into local money, and the reverse"));
+    var cv = el("div", "cover"); J.forEach(function (j) { var c = C.COVERAGE[j.id] || "limited"; var s = el("span", "", j.ccy + ": " + c); s.dataset.c = c; s.title = c === "good" ? "Licensed providers and a normal rulebook" : C.COVERAGE_WHY[c]; cv.appendChild(s); });
+    b3.appendChild(cv);
+    b3.appendChild(el("p", "ctl-note", "Good: licensed providers and a normal rulebook, with an on ramp fee of " + C.MODEL.stable.onramp.good + " basis points and an off ramp fee of " + C.MODEL.stable.offramp.good + ". Limited (dashed): " + C.COVERAGE_WHY.limited + " Fees " + C.MODEL.stable.onramp.limited + " and " + C.MODEL.stable.offramp.limited + " basis points. None (struck through): " + C.COVERAGE_WHY.none));
+    box.appendChild(b3);
+  }
+
   // ---------- transfer flow ----------
   function renderStages(plan) {
     var box = $("stages"), det = $("stage-detail"); box.textContent = ""; det.textContent = "";
@@ -449,6 +611,12 @@
     var bl = el("div", "blocks"); s.blocks.forEach(function (b) { bl.appendChild(el("span", "blk", b)); }); right.appendChild(bl);
     var lk = el("p", "hint"); var a = el("a", "", "Open the Core banking blueprint"); a.href = "../core-banking-blueprint/"; lk.appendChild(a); right.appendChild(lk);
     right.appendChild(el("h5", "", "What goes wrong")); right.appendChild(el("p", "fails", s.fails));
+    if (route && route.coin) {
+      var cx = C.CRYPTO_STAGES[s.n - 1], ce = el("div", "coin-extra"); ce.appendChild(el("h5", "", "When a stablecoin leg is used"));
+      var cul = el("ul"); cx.inside.forEach(function (t) { cul.appendChild(el("li", "", t)); }); ce.appendChild(cul);
+      var cb = el("div", "blocks"); cx.blocks.forEach(function (b) { var bs = el("span", "blk coin", b); cb.appendChild(bs); }); ce.appendChild(cb);
+      ce.appendChild(el("p", "fails", cx.fails)); right.appendChild(ce);
+    }
     if (route) {
       right.appendChild(el("h5", "", "For the route shown"));
       right.appendChild(el("p", "forroute", route.stages[s.n - 1]));
@@ -467,13 +635,13 @@
     var r = plan.routes[state.sel] || plan.routes[0];
     if (!r) { box.appendChild(el("p", "acq-none", "Choose accounts that give a route to see its rules.")); return; }
     var c0 = el("div", "rule-card"); c0.appendChild(el("h4", "", "Applies to any cross-border transfer"));
-    var dl0 = el("dl"); r.compliance.globalRegs.forEach(function (g) { dl0.appendChild(el("dt", "", g.name)); dl0.appendChild(el("dd", "", g.why)); }); c0.appendChild(dl0); box.appendChild(c0);
+    var dl0 = el("dl"); r.compliance.globalRegs.forEach(function (g) { var dt0 = el("dt", "", g.name); if (g.crypto) dt0.appendChild(el("span", "tagc", "crypto")); dl0.appendChild(dt0); dl0.appendChild(el("dd", "", g.why)); }); c0.appendChild(dl0); box.appendChild(c0);
     var by = {}, order = [];
     r.compliance.regs.forEach(function (g) { if (!by[g.jur]) { by[g.jur] = []; order.push(g.jur); } by[g.jur].push(g); });
     [state.from, state.to].concat(order).filter(function (v, i, a) { return a.indexOf(v) === i && by[v]; }).forEach(function (id) {
       var role = id === state.from ? "sender's country" : id === state.to ? "receiver's country" : "currency clearing";
       var card = el("div", "rule-card"); card.appendChild(el("h4", "", by[id][0].jurName + " (" + role + ")"));
-      var dl = el("dl"); by[id].forEach(function (g) { dl.appendChild(el("dt", "", g.name)); dl.appendChild(el("dd", "", g.why)); }); card.appendChild(dl); box.appendChild(card);
+      var dl = el("dl"); by[id].forEach(function (g) { var dt1 = el("dt", "", g.name); if (g.crypto) dt1.appendChild(el("span", "tagc", "crypto")); dl.appendChild(dt1); dl.appendChild(el("dd", "", g.why)); }); card.appendChild(dl); box.appendChild(card);
     });
     r.compliance.checks.slice().sort(function (a, b) { return a.stage - b.stage; }).forEach(function (c) {
       var d = el("div", "check"); d.appendChild(el("span", "st", String(c.stage)));
@@ -528,9 +696,9 @@
   }
   function buildNotes() {
     var n = $("notes");
-    C.NOTES.forEach(function (x) { var d = el("details", "note"); d.appendChild(el("summary", "", x.title)); d.appendChild(el("p", "", x.text)); n.appendChild(d); });
+    C.NOTES.concat(C.CRYPTO_NOTES).forEach(function (x) { var d = el("details", "note"); d.appendChild(el("summary", "", x.title)); d.appendChild(el("p", "", x.text)); n.appendChild(d); });
     var g = $("glossary");
-    C.GLOSSARY.forEach(function (x) { var d = el("div"); d.appendChild(el("dt", "", x[0])); d.appendChild(el("dd", "", x[1])); g.appendChild(d); });
+    C.GLOSSARY.concat(C.CRYPTO_GLOSSARY).forEach(function (x) { var d = el("div"); d.appendChild(el("dt", "", x[0])); d.appendChild(el("dd", "", x[1])); g.appendChild(d); });
   }
 
   // ---------- plain text ----------
@@ -542,6 +710,7 @@
     lines.push("");
     lines.push("Route: " + routeTitle(r) + ".");
     lines.push("About " + R.money(r.totals.usd) + " (" + pct(r.totals.pct) + " percent), typical arrival " + R.minutesText(r.totals.minutes.typ) + ", best " + R.minutesText(r.totals.minutes.best) + ", worst " + R.minutesText(r.totals.minutes.worst) + ".");
+    if (r.coin) lines.push("Stablecoin: " + r.coin.id + (r.coin.buffer ? " from a prefunded float at the receiving end." : " on " + C.CHAINS[r.coin.chain].name + "."));
     lines.push(""); lines.push("Moves:");
     r.legs.forEach(function (l, i) { lines.push((i + 1) + ". " + l.text + ": " + R.money(legTotal(l)) + ", " + R.minutesText(l.minutes.typ) + "."); });
     lines.push(""); lines.push("Accounts used: " + r.nodes.filter(function (n) { return n.kind === "hold"; }).map(function (n) { return n.ccy + " at " + n.bank + " (" + MODE_WORD[n.mode] + ")"; }).join("; ") + ".");
@@ -559,7 +728,7 @@
     syncControls();
     var plan = R.plan(request()); lastPlan = plan;
     if (state.sel >= plan.routes.length) state.sel = 0;
-    renderSummary(plan); renderRoutes(plan); renderAcquire(plan); renderMatrixView(); renderStages(plan); renderRules(plan); renderExport(plan); markDirectory();
+    renderSummary(plan); renderWays(plan); renderRoutes(plan); renderAcquire(plan); renderTreasury(); renderMatrixView(); renderStages(plan); renderRules(plan); renderExport(plan); markDirectory();
     writeHash();
   }
 
@@ -575,6 +744,7 @@
   buildLegend();
   buildNotes();
   renderDirectory();
+  renderStableRef();
   refresh();
   window.addEventListener("hashchange", function () { readHash(); refresh(); });
 })();

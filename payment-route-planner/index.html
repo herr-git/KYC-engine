@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Payment route planner</title>
-  <meta name="description" content="Pick a sender country, a receiver country, an amount and what matters most. See the shortest paths through local clearing schemes, custodian banks and currency conversions, with cost, speed, the compliance checks and the rules that bind each route.">
+  <meta name="description" content="Pick a sender country, a receiver country, an amount and what matters most. See the shortest paths through local clearing schemes, custodian banks, currency conversions and stablecoins, with cost, speed, the compliance checks and the rules that bind each route.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&display=swap">
@@ -30,6 +30,11 @@
         <div id="transfer"></div>
       </section>
       <section class="group">
+        <h2>Stablecoin</h2>
+        <p class="hint">A token that holds one currency's value and moves on a blockchain at any hour. Try it as a bridge between two local schemes, with or without a float already sitting at the receiving end.</p>
+        <div id="stable"></div>
+      </section>
+      <section class="group">
         <h2>Your accounts</h2>
         <p class="hint">Which currencies your firm can hold, and how it reaches each local scheme.</p>
         <div id="footprints" class="presets"></div>
@@ -49,6 +54,14 @@
         <div id="kpis" class="kpis"></div>
       </section>
 
+      <section aria-label="Three ways to send this">
+        <h3>Three ways to send this</h3>
+        <p class="hint">The same transfer by banks only, with a stablecoin as the bridge, and with a stablecoin plus a float of coins already waiting at the receiving end. Select a row to switch to it.</p>
+        <p id="ways-line" class="ways-line"></p>
+        <div id="ways" class="ways"></div>
+        <p id="ways-why" class="hint"></p>
+      </section>
+
       <section aria-label="Routes">
         <h3>The best routes</h3>
         <p class="hint">Each route is a chain: the sender, one or more accounts (pools), and the receiver. The coloured links are the moves between them. Select a route to see its checks and rules below.</p>
@@ -61,6 +74,16 @@
         <h3>What would change the answer</h3>
         <p class="hint">Access you could add to your accounts, and what it would save on this corridor.</p>
         <div id="acquire" class="acquire"></div>
+      </section>
+
+      <section aria-label="Treasury">
+        <h3>Treasury: move value between your own pools</h3>
+        <p class="hint">Not a customer payment. This is topping up one pool from another, by a bank conversion or through a stablecoin. Uses the amount and timing chosen on the left.</p>
+        <div class="tr-ctl">
+          <label class="sortbox">From pool <select id="sel-tf"></select></label>
+          <label class="sortbox">To pool <select id="sel-tt"></select></label>
+        </div>
+        <div id="treasury" class="treasury"></div>
       </section>
 
       <section aria-label="Corridor heat map">
@@ -112,6 +135,9 @@
     <h2>Schemes and custodian banks by currency</h2>
     <p class="hint" id="dir-hint"></p>
     <div id="directory" class="directory"></div>
+    <h2>Stablecoins, chains and cash out coverage</h2>
+    <p class="hint" id="stable-hint"></p>
+    <div id="stable-ref" class="stable-ref"></div>
     <h2>How cross-border payments are built</h2>
     <div id="notes" class="note-grid"></div>
     <h2>Key terms</h2>
@@ -124,6 +150,7 @@
       <li>Fees, speeds, spreads and limits are illustrative round numbers chosen for a demonstration. They are not quotes and not current. The scheme names and rough behaviour come from public knowledge.</li>
       <li>The route score is a plain sum of the moves. Every number that moves it is shown, and you can change it in <code>catalog.js</code>.</li>
       <li>The bank list comes from the open bank registry in the schwifty package (MIT licence) for the countries it covers, plus a curated list of well known banks elsewhere. It is not a directory, it can be out of date, and being listed is not an endorsement.</li>
+      <li>The stablecoin legs use illustrative on ramp, off ramp and network fees, and a simple rating of how easy it is to cash out in each country. Coin names are examples of the kind of asset, not recommendations. Coins can lose their price and issuers can freeze addresses.</li>
       <li>Rules are summarised at headline level and some are changing. Check the current official text. Nothing here is legal advice.</li>
       <li>Real routing also depends on contracts, partner coverage, daily cut off times, risk appetite and live scheme status. This page cannot know those.</li>
       <li>No real customer data and no data from any real firm is used.</li>

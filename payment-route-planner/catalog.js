@@ -406,7 +406,114 @@
     { id: "gb-ph", name: "UK to Philippines", from: "GB", to: "PH", amount: 1000, priority: "fastest", when: "weekend", footprint: "global" },
     { id: "us-ke", name: "US to Kenya", from: "US", to: "KE", amount: 200, priority: "cheapest", when: "weekday", footprint: "global" },
     { id: "jp-sg", name: "Japan to Singapore", from: "JP", to: "SG", amount: 20000, priority: "balanced", when: "evening", footprint: "global" },
-    { id: "ea-ng", name: "Euro area to Nigeria", from: "EA", to: "NG", amount: 1000, priority: "balanced", when: "weekday", footprint: "eu-pi" }
+    { id: "ea-ng", name: "Euro area to Nigeria", from: "EA", to: "NG", amount: 1000, priority: "balanced", when: "weekday", footprint: "eu-pi" },
+    { id: "us-ng", name: "US to Nigeria by stablecoin, weekend", from: "US", to: "NG", amount: 200, priority: "cheapest", when: "weekend", footprint: "global", stable: "auto" },
+    { id: "ea-br", name: "Euro area to Brazil, stablecoin float, weekend", from: "EA", to: "BR", amount: 5000, priority: "fastest", when: "weekend", footprint: "eu-pi", stable: "auto", buffer: true }
+  ];
+
+  // ---------- stablecoins ----------
+  // A stablecoin is a token that tries to hold one currency's value, so it can move on a blockchain at any hour.
+  // Used here three ways: remittance (a bridge between two local schemes), buffer (a prefunded float at the
+  // receiving end) and treasury (moving value between your own pools). All numbers are illustrative.
+  var COINS = [
+    { id: "USDC", name: "USDC", peg: "USD", issuer: "Circle", chains: ["solana", "base", "ethereum"], mica: true,
+      note: "A dollar coin from a regulated US issuer, also authorised as an electronic money token in the European Union." },
+    { id: "EURC", name: "EURC", peg: "EUR", issuer: "Circle", chains: ["solana", "base", "ethereum"], mica: true,
+      note: "A euro coin. Fits euro senders, since no dollar conversion is needed on the way in." },
+    { id: "USDT", name: "USDT", peg: "USD", issuer: "Tether", chains: ["tron", "ethereum", "solana"], mica: false,
+      note: "The most used dollar coin in many cash-out markets. It is not authorised under the EU crypto law, so regulated EU firms cannot offer it." }
+  ];
+  var CHAINS = {
+    solana:   { name: "Solana",   fee: 0.02, speed: { best: 0.2, typ: 1, worst: 5 } },
+    base:     { name: "Base",     fee: 0.05, speed: { best: 0.5, typ: 2, worst: 10 } },
+    tron:     { name: "Tron",     fee: 1.5,  speed: { best: 1, typ: 3, worst: 15 } },
+    ethereum: { name: "Ethereum", fee: 4,    speed: { best: 2, typ: 6, worst: 20 } }
+  };
+  // How easy it is to turn a stablecoin into local money, and local money into a stablecoin.
+  // good: licensed providers and a normal rulebook. limited: fewer providers and heavier rules. none: not allowed.
+  var COVERAGE = {
+    US: "good", EA: "good", GB: "good", JP: "good", AU: "good", CA: "good", CH: "good", DK: "good", SG: "good", AE: "good",
+    MX: "good", ZA: "good", BR: "good", TH: "limited", IN: "limited", PH: "limited", KE: "limited", NG: "limited", TR: "limited", CN: "none"
+  };
+  var COVERAGE_WHY = {
+    limited: "Few licensed providers, heavier local rules and sometimes limits on who may cash out.",
+    none: "Mainland rules prohibit these services, so the planner never routes through them."
+  };
+  var STABLE_EXAMPLES = {
+    custodians: ["BitGo", "Anchorage Digital", "Coinbase Custody", "Fireblocks (technology, with a licensed custodian)"],
+    note: "Example names only, to show the kind of firm that does each job. No endorsement, and not a recommendation. Local on and off ramp providers differ by country and change often."
+  };
+
+  // Rules about crypto by country, at headline level. Each is [name, why it matters for a stablecoin leg].
+  var CRYPTO_REGS = {
+    US: [
+      ["GENIUS Act (payment stablecoins)", "A federal framework for payment stablecoin issuers, signed in 2025. Issuers need permission, full reserves and redemption at par. Rules are still phasing in, so check the dates."],
+      ["FinCEN rules for virtual currency", "Exchanging or sending virtual currency for others is money transmission. Register, run an anti-money laundering programme and pass sender details along from 3,000 dollars."]
+    ],
+    EA: [
+      ["Markets in Crypto-Assets Regulation (MiCA, EU 2023/1114)", "A stablecoin must come from an authorised issuer and a provider needs authorisation. A coin that does not qualify cannot be offered to customers in the euro area."],
+      ["Transfer of Funds Regulation, crypto part", "Crypto transfers carry sender and receiver details from the first euro. Transfers to or from a wallet you do not control need extra checks above 1,000 euros."]
+    ],
+    DK: [["Danish supervision under MiCA", "The Danish Financial Supervisory Authority supervises crypto service providers. MiCA applies directly, with Danish anti-money laundering rules on top."]],
+    GB: [["Financial Conduct Authority crypto rules", "Crypto firms must be registered for anti-money laundering and follow the promotion rules. A full stablecoin regime is being phased in, so check its status."]],
+    JP: [["Payment Services Act (electronic payment instruments)", "Only licensed banks, trust companies and registered transfer firms may issue stablecoins. Handling them needs registration as an intermediary."]],
+    SG: [["Payment Services Act (digital payment tokens)", "Firms that deal in digital tokens need a licence from the Monetary Authority of Singapore. A separate framework covers single currency stablecoins."]],
+    AE: [["Virtual asset licensing (Dubai, Abu Dhabi) and central bank token rules", "A virtual asset firm needs a licence in its zone. Payment tokens have their own central bank rules."]],
+    CH: [["Swiss financial regulator guidance on stablecoins", "Issuers and custodians may need a bank or other licence. Anti-money laundering duties apply to every intermediary."]],
+    AU: [["AUSTRAC registration and digital asset platform reform", "Exchanges must register with the anti-money laundering regulator, and a new licensing regime for platforms is being introduced."]],
+    CA: [["FINTRAC registration and securities rules", "Crypto dealers register as money services businesses. Stablecoin specific rules are being introduced, so check the status."]],
+    BR: [["Virtual asset service providers law and central bank rules", "Providers need central bank authorisation. Moving stablecoins across the border is treated as a foreign exchange operation and reported."]],
+    MX: [["Fintech Law and central bank limits", "Banks may not offer crypto assets to customers, so cash out goes through a licensed exchange or fintech partner."]],
+    IN: [["Tax and reporting for virtual digital assets", "Gains are taxed at a flat rate, transfers can carry withholding tax and providers register with the financial intelligence unit. Check that cash out is allowed for the purpose."]],
+    ZA: [["Crypto asset provider licensing and exchange control", "Providers are licensed by the financial conduct authority. Moving crypto across the border falls under exchange control."]],
+    TH: [["Digital asset business rules", "Only licensed operators may run exchanges and brokers. The regulator limits which tokens may be used for payment."]],
+    PH: [["Virtual asset service provider rules", "Providers need registration with the central bank. Check the current approval status."]],
+    KE: [["Virtual Asset Service Providers Act", "A licensing regime for providers. Check when each part starts and what the central bank allows."]],
+    NG: [["Securities regulator and central bank positions on digital assets", "Exchanges are licensed by the securities regulator. Banking guidance on crypto has changed more than once, so check before relying on it."]],
+    TR: [["Capital markets law on crypto providers", "Providers need a licence. Paying for goods with crypto is banned, so cash out must go through a licensed provider into lira."]],
+    CN: [["Ban on crypto trading and related services", "Mainland rules prohibit these services."]]
+  };
+  var CRYPTO_GLOBAL_REGS = [
+    ["FATF Recommendation 15 (virtual assets)", "The global standard that gives crypto providers the same customer, screening and record duties as banks, and asks for sender and receiver details to travel with crypto transfers."],
+    ["Sanctions apply on chain", "Issuers can freeze coins at a sanctioned address. Screen wallet addresses, not only names."]
+  ];
+
+  // Checks that only appear when a stablecoin is part of the route.
+  var CRYPTO_CHECKS = [
+    { id: "wallet", name: "Screen the wallet addresses", stage: 2, plain: "Look at the history of every wallet address in the transfer for links to sanctions, scams, mixers and criminal markets. Names alone are not enough." },
+    { id: "coin", name: "Confirm the coin may be used", stage: 2, plain: "A stablecoin is only usable where its issuer is authorised. Some coins are barred in some regions." },
+    { id: "peg", name: "Watch the peg and the issuer", stage: 3, plain: "A stablecoin can trade below its price during stress. Set a limit that pauses the route and cap how much of one issuer you hold." },
+    { id: "custody", name: "Keep customer coins apart in custody", stage: 4, plain: "Coins held for customers sit in segregated wallets at a qualified custodian, with approvals before anything moves, and match the books every day." },
+    { id: "vasp", name: "Crypto licence or partner at each end", stage: 5, plain: "Buying and selling coins for customers needs a virtual asset service provider licence, or a partner that holds one in that country." },
+    { id: "float", name: "Limit the prefunded float", stage: 4, plain: "A float is money already sitting at the other end. Cap it, top it up in batches, and cap the exposure to the partner that holds it." }
+  ];
+
+  // What changes at each stage when a stablecoin leg is used. Block names match the Core banking blueprint.
+  var CRYPTO_STAGES = [
+    { inside: ["Quote includes the coin legs and the network fee", "Rate lock matters more: the coin price moves too"], blocks: ["Fiat on and off ramp"], fails: "A quote that leaves out the on ramp fee or the cash out spread." },
+    { inside: ["Screen wallet addresses with blockchain analytics", "Travel rule message to the receiving provider", "Check the coin is allowed on both ends"], blocks: ["Blockchain analytics (wallet screening)", "Travel rule messaging"], fails: "A wallet with a bad history found after the coins have moved, and a receiving provider that cannot take the travel rule message." },
+    { inside: ["Peg and issuer limits that can switch the route off", "Fallback to a bank route when the chain is congested"], blocks: ["Crypto trading and liquidity"], fails: "A coin below its price at the moment of the quote." },
+    { inside: ["Buy the coin with the pool, or draw from a prefunded float", "Hot, warm and cold wallet tiers", "Rebalance the float in batches on weekdays"], blocks: ["Crypto custody and key management", "Fiat on and off ramp", "Crypto trading and liquidity", "Treasury and liquidity"], fails: "An empty float at the weekend, or a hot wallet with limits set too high." },
+    { inside: ["Build and broadcast the transaction", "Wait for enough confirmations on the chosen chain", "Off ramp partner pays out through the local scheme"], blocks: ["Blockchain connectivity", "Fiat on and off ramp"], fails: "Coins sent to a wrong address or the wrong chain. Nothing can be reversed." },
+    { inside: ["Match three things: bank statements, on chain balances and the ledger", "Handle coins that arrive late or in the wrong amount"], blocks: ["Multi-asset and on-chain ledger", "Reconciliation"], fails: "A mismatch between what the wallet holds and what customers are owed." },
+    { inside: ["Reports on crypto transfers where required", "Proof that customer coins were kept apart"], blocks: ["Regulatory reporting"], fails: "A filing that treats a coin transfer like a bank transfer." }
+  ];
+
+  var CRYPTO_NOTES = [
+    { title: "Three jobs for a stablecoin",
+      text: "Remittance: a bridge between two local schemes, so money is sent on a blockchain in the middle and paid out locally at the end. Buffer: a float of coins already sitting at the receiving end, so a payout does not wait for the chain or for banks to open. Treasury: moving value between your own pools in different currencies, including at weekends when the foreign exchange market is shut." },
+    { title: "What a stablecoin does not fix",
+      text: "It still needs regulated ways in and out of local money at both ends. In many countries those are the thin and expensive part. Check the coverage rating before trusting a cheap looking route." },
+    { title: "Why a buffer costs something",
+      text: "Coins held as a float earn nothing and carry the risk that the coin or its issuer has a bad day. The planner charges a small holding cost per transfer and counts a share of the top up cost, because top ups are batched and offset by flows in the other direction." }
+  ];
+  var CRYPTO_GLOSSARY = [
+    ["Stablecoin", "A token designed to hold the value of one currency, such as the dollar or the euro, so it can be moved on a blockchain at any hour."],
+    ["On ramp and off ramp", "On ramp: turning local money into coins. Off ramp: turning coins into local money."],
+    ["Blockchain analytics", "Tools that follow the history of a wallet address to flag links to sanctions, scams or crime."],
+    ["Custodian (crypto)", "A regulated firm that holds the keys to the wallets that hold customers' coins."],
+    ["Peg", "The price a stablecoin tries to hold. A depeg is when it trades noticeably away from that price."],
+    ["Float", "A pile of money or coins kept ready at the receiving end so payouts can be instant."]
   ];
 
   // Cost and time assumptions for the parts that are not a local scheme. All illustrative.
@@ -426,6 +533,15 @@
     },
     // Extra minutes waited, for a scheme that is not open all day: [weekday, evening, weekend]
     wait: { rtgs: [0, 720, 2640], batch: [240, 840, 2760] },
+    stable: {
+      onramp: { good: 15, limited: 45, fixed: 1 },       // basis points by coverage, plus dollars
+      offramp: { good: 25, limited: 80, fixed: 1 },
+      onSpeed: { best: 2, typ: 8, worst: 45 },           // minutes, plus any wait for the funding transfer
+      offSpeed: { best: 2, typ: 10, worst: 60 },
+      chainOps: 2,                                       // basis points for screening and custody operations
+      buffer: { netting: 0.5, carryPercentPerYear: 4, floatDays: 5, reserveBps: 1, speed: { best: 0.5, typ: 2, worst: 10 } },
+      pegWatch: "Pause the route if the coin trades more than 0.5 percent from its price."
+    },
     hopWeight: { cheapest: 0.05, fastest: 5, balanced: 8, fewest: 120 },
     priorities: {
       cheapest: { name: "Cheapest", bps: 1, hours: 0.002 },
@@ -438,6 +554,9 @@
   return {
     JURISDICTIONS: JURISDICTIONS, SCHEMES: SCHEMES, ACCESS_NOTES: ACCESS_NOTES, LEAD_MONTHS: LEAD_MONTHS,
     REGS: REGS, GLOBAL_REGS: GLOBAL_REGS, DATA_REG: DATA_REG, CHECKS: CHECKS, STAGES: STAGES, NOTES: NOTES,
-    GLOSSARY: GLOSSARY, FOOTPRINTS: FOOTPRINTS, CORRIDORS: CORRIDORS, MODEL: MODEL
+    GLOSSARY: GLOSSARY, FOOTPRINTS: FOOTPRINTS, CORRIDORS: CORRIDORS, MODEL: MODEL,
+    COINS: COINS, CHAINS: CHAINS, COVERAGE: COVERAGE, COVERAGE_WHY: COVERAGE_WHY, STABLE_EXAMPLES: STABLE_EXAMPLES,
+    CRYPTO_REGS: CRYPTO_REGS, CRYPTO_GLOBAL_REGS: CRYPTO_GLOBAL_REGS, CRYPTO_CHECKS: CRYPTO_CHECKS, CRYPTO_STAGES: CRYPTO_STAGES,
+    CRYPTO_NOTES: CRYPTO_NOTES, CRYPTO_GLOSSARY: CRYPTO_GLOSSARY
   };
 });
